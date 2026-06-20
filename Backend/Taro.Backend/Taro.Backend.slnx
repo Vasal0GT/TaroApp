@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Taro.Api/Taro.Api.csproj" />
+    <Project Path="src/Taro.Core/Taro.Core.csproj" />
+    <Project Path="src/Taro.Infrastructure/Taro.Infrastructure.csproj" />
+    <Project Path="src/Taro.Worker/Taro.Worker.csproj" />
+  </Folder>
+</Solution>

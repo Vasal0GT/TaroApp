@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: taro-postgres
+    environment:
+      POSTGRES_DB: taro
+      POSTGRES_USER: taro
+      POSTGRES_PASSWORD: taro
+    ports:
+      - "5432:5432"
+    volumes:
+      - taro_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taro -d taro"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: taro-mailpit
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  api:
+    container_name: taro-api
+    build:
+      context: ./Taro.Backend
+      dockerfile: src/Taro.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=taro;Username=taro;Password=taro
+
+      Jwt__Issuer: Taro
+      Jwt__Audience: Taro.Mobile
+      Jwt__Secret: THIS_IS_DEV_SECRET_CHANGE_IT_LATER_1234567890_ABCDE
+      Jwt__AccessTokenMinutes: "15"
+
+      Mail__Host: mailpit
+      Mail__Port: "1025"
+      Mail__UseSsl: "false"
+      Mail__Username: ""
+      Mail__Password: ""
+      Mail__FromEmail: no-reply@taro.local
+      Mail__FromName: Taro
+
+      ExternalAuth__GoogleAudiences__0: YOUR_GOOGLE_WEB_CLIENT_ID.apps.googleusercontent.com
+      ExternalAuth__GoogleAudiences__1: YOUR_GOOGLE_IOS_CLIENT_ID.apps.googleusercontent.com
+      ExternalAuth__GoogleAudiences__2: YOUR_GOOGLE_ANDROID_CLIENT_ID.apps.googleusercontent.com
+
+      ExternalAuth__AppleAudiences__0: host.exp.Exponent
+      ExternalAuth__AppleAudiences__1: com.sasha.taro
+    ports:
+      - "5000:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
+volumes:
+  taro_postgres_data:
