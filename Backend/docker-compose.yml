@@ -23,6 +23,21 @@ services:
       - "8025:8025"
       - "1025:1025"
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: taro-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: taro
+      RABBITMQ_DEFAULT_PASS: taro
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   api:
     container_name: taro-api
     build:
@@ -53,13 +68,62 @@ services:
 
       ExternalAuth__AppleAudiences__0: host.exp.Exponent
       ExternalAuth__AppleAudiences__1: com.sasha.taro
+
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: taro
+      RabbitMQ__Password: taro
+      RabbitMQ__QueueName: tarot-readings
+
+      YooKassa__ShopId: 1392577
+      YooKassa__SecretKey: test_5dby668PwfF9UGJCogYuI39Se633xkgGo_wd2vZnaeg
+      YooKassa__ReturnUrl: https://example.com/payment-return
+
+      BillingPortal__BaseUrl: http://localhost:3000
+      BillingPortal__AccessTokenMinutes: "120"
     ports:
       - "5000:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
       mailpit:
         condition: service_started
+
+  worker:
+    container_name: taro-worker
+    build:
+      context: ./Taro.Backend
+      dockerfile: src/Taro.Worker/Dockerfile
+    environment:
+      DOTNET_ENVIRONMENT: Development
+
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=taro;Username=taro;Password=taro
+
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: taro
+      RabbitMQ__Password: taro
+      RabbitMQ__QueueName: tarot-readings
+
+      OpenAI__ApiKey: ${OPENAI_API_KEY}
+      OpenAI__Model: gpt-5.4-mini
+
+      YooKassa__ShopId: 1392577
+      YooKassa__SecretKey: test_5dby668PwfF9UGJCogYuI39Se633xkgGo_wd2vZnaeg
+      YooKassa__ReturnUrl: https://example.com/payment-return
+
+      ReadingWorker__OpenAiRequestsPerSecond: "7"
+      ReadingWorker__ConcurrentMessageLimit: "20"
+      ReadingWorker__PrefetchCount: "20"
+
+      OpenAI__MaxAttempts: "4"
+      OpenAI__RetryBaseDelaySeconds: "2"
+      OpenAI__RetryMaxDelaySeconds: "20"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
 volumes:
   taro_postgres_data:

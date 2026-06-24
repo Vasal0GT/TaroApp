@@ -1,9 +1,12 @@
+using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Text.Json.Serialization;
+using Taro.Api.Billing;
 using Taro.Api.Middleware;
 using Taro.Core;
 using Taro.Infrastructure;
@@ -44,6 +47,30 @@ namespace Taro.Api
 
             builder.Services.AddCore();
             builder.Services.AddInfrastructure(builder.Configuration);
+            builder.Services.AddDataProtection().SetApplicationName("Taro.Api");
+            builder.Services.Configure<BillingPortalOptions>(builder.Configuration.GetSection("BillingPortal"));
+            builder.Services.AddSingleton<BillingPortalAccessTokenService>();
+            builder.Services.AddMassTransit(x =>
+            {
+                x.UsingRabbitMq((context, cfg) =>
+                {
+                    var rabbitHost =
+                        builder.Configuration["RabbitMQ:Host"] ?? "localhost";
+
+                    var rabbitUsername =
+                        builder.Configuration["RabbitMQ:Username"] ?? "guest";
+
+                    var rabbitPassword =
+                        builder.Configuration["RabbitMQ:Password"] ?? "guest";
+
+                    cfg.Host(rabbitHost, "/", h =>
+                    {
+                        h.Username(rabbitUsername);
+                        h.Password(rabbitPassword);
+                    });
+                });
+            });
+
 
             var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>();
 

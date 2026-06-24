@@ -25,5 +25,9 @@ namespace Taro.Core.Entities
         public string? ZodiacSign { get; set; }
         public bool IsOnboardingCompleted { get; set; }
         public List<ExternalAuthAccount> ExternalAuthAccounts { get; set; } = new();
+        public List<PaymentOrder> PaymentOrders { get; set; } = new();
+        public List<Subscription> Subscriptions { get; set; } = new();
+        public List<WalletTransaction> WalletTransactions { get; set; } = new();
+        public List<BillingPortalSession> BillingPortalSessions { get; set; } = new();
     }
 }
