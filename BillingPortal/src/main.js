@@ -12,7 +12,9 @@ const API_BASE_URL =
   window.TARO_PORTAL_CONFIG?.apiBaseUrl ||
   "http://localhost:5000";
 
-const logoUrl = "/assets/logo-glow.png";
+const logoUrl = "/assets/inner-icon.png";
+const cardBackUrl = "/assets/card-back.png";
+const cardFrontUrl = "/assets/card-front.png";
 
 const plans = [
   {
@@ -487,7 +489,9 @@ function renderHomePage() {
           изучить возможности профиля и спокойно вернуться к нужному разделу.
         </p>
         <div class="hero-art" aria-hidden="true">
-          <span class="hero-symbol">☽</span>
+          <img class="hero-card hero-card-back" src="${cardBackUrl}" alt="" />
+          <img class="hero-card hero-card-front" src="${cardFrontUrl}" alt="" />
+          <img class="hero-symbol" src="${logoUrl}" alt="" />
         </div>
       </section>
 

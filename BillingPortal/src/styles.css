@@ -120,9 +120,10 @@ a {
 }
 
 .brand-mark img {
-  width: 120%;
-  height: 120%;
-  object-fit: cover;
+  width: 88%;
+  height: 88%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(190, 111, 255, 0.46));
 }
 
 .brand-fallback {
@@ -238,41 +239,35 @@ a {
   box-shadow: var(--shadow);
 }
 
-.hero-art::before,
-.hero-art::after {
-  content: "";
+.hero-card {
   position: absolute;
-  inset: auto;
-  border-radius: 26px;
-  transform: rotate(-12deg);
-  background: linear-gradient(145deg, #f7d33c, #f0a91f);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+  width: 86px;
+  height: 139px;
+  border-radius: 10px;
+  object-fit: cover;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
 }
 
-.hero-art::before {
-  width: 86px;
-  height: 126px;
+.hero-card-back {
   left: 34px;
-  top: 28px;
+  top: 24px;
+  transform: rotate(-12deg);
 }
 
-.hero-art::after {
-  width: 86px;
-  height: 126px;
+.hero-card-front {
   left: 104px;
-  top: 18px;
-  opacity: 0.82;
+  top: 14px;
   transform: rotate(9deg);
 }
 
 .hero-symbol {
   position: absolute;
-  right: 28px;
-  bottom: 24px;
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 72px;
-  line-height: 1;
-  font-weight: 900;
+  right: 20px;
+  bottom: 12px;
+  width: 112px;
+  height: 112px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 18px rgba(190, 111, 255, 0.5));
 }
 
 .section {
