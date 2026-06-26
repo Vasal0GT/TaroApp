@@ -454,11 +454,11 @@ function renderShell(content, showSticky) {
       <div class="container">
         <header class="topbar">
           <div class="topbar-inner">
-            <a class="brand-mark" href="/" data-link aria-label="Taro">
+            <a class="brand-mark" href="/" data-link aria-label="Таро Путь">
               <img src="${logoUrl}" alt="" onerror="this.remove(); this.parentNode.innerHTML='<span class=&quot;brand-fallback&quot;>✦</span>'" />
             </a>
             <div class="brand-copy">
-              <p class="brand-name">Taro</p>
+              <p class="brand-name">Таро Путь</p>
               <p class="account-line">${renderAccountLine()}</p>
             </div>
             <div class="topbar-actions">
@@ -482,7 +482,7 @@ function renderHomePage() {
   return `
     <main>
       <section class="hero">
-        <p class="eyebrow">✦ Личный портал Taro</p>
+        <p class="eyebrow">✦ Личный портал Таро Путь</p>
         <h1 class="page-title">Таро, профиль и подсказки в одном месте</h1>
         <p class="lead">
           Здесь можно узнать больше о приложении, посмотреть полезные подсказки,
@@ -496,9 +496,9 @@ function renderHomePage() {
       </section>
 
       <section class="section panel">
-        <h2 class="section-title">Что такое Taro</h2>
+        <h2 class="section-title">Что такое Таро Путь</h2>
         <p class="section-copy">
-          Taro помогает мягко разбирать вопросы через карты: выбрать тему, сформулировать
+          Таро Путь помогает мягко разбирать вопросы через карты: выбрать тему, сформулировать
           запрос, открыть расклад и получить спокойную AI-трактовку без фатальности и страха.
           Это не обещание будущего, а личное пространство, где можно увидеть ситуацию
           под другим углом и сохранить важные наблюдения.
@@ -753,7 +753,7 @@ function renderPaymentResultPage() {
 
   return `
     <main>
-      ${renderPageIntro("Возврат после оплаты", "Мы вернули вас в портал Taro. Если платёж уже обработан, статус обновится в личном кабинете.")}
+      ${renderPageIntro("Возврат после оплаты", "Мы вернули вас в портал Таро Путь. Если платёж уже обработан, статус обновится в личном кабинете.")}
 
       <section class="section status-card">
         <div class="status-mark">${active ? "✓" : "⌁"}</div>
@@ -922,7 +922,7 @@ function renderHomeActions() {
 function renderLoginPage() {
   return `
     <main>
-      ${renderPageIntro("Вход", "Войдите в аккаунт Taro, чтобы оформить подписку или купить звёзды без перехода из приложения.")}
+      ${renderPageIntro("Вход", "Войдите в аккаунт Таро Путь, чтобы оформить подписку или купить звёзды без перехода из приложения.")}
       <section class="section panel">
         <form class="auth-form" data-form="login">
           <label class="field">
@@ -944,7 +944,7 @@ function renderLoginPage() {
 function renderRegisterPage() {
   return `
     <main>
-      ${renderPageIntro("Регистрация", "Создайте аккаунт Taro. Если почта требует подтверждения, код можно будет ввести здесь же.")}
+      ${renderPageIntro("Регистрация", "Создайте аккаунт Таро Путь. Если почта требует подтверждения, код можно будет ввести здесь же.")}
       <section class="section panel">
         <form class="auth-form" data-form="register">
           <label class="field">
@@ -990,7 +990,7 @@ function renderVerifyEmailPage() {
 function renderAuthRequiredPage() {
   return `
     <main>
-      ${renderPageIntro("Войдите в аккаунт", "Чтобы продолжить оформление, войдите в аккаунт Taro или создайте новый. После входа сайт вернёт вас к выбору тарифа и звёзд.")}
+      ${renderPageIntro("Войдите в аккаунт", "Чтобы продолжить оформление, войдите в аккаунт Таро Путь или создайте новый. После входа сайт вернёт вас к выбору тарифа и звёзд.")}
       <section class="section panel">
         <div class="actions">
           <a class="button" href="/login" data-link>Войти</a>
