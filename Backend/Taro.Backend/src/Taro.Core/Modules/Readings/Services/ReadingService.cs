@@ -241,10 +241,10 @@ namespace Taro.Core.Modules.Readings.Services
             return spreadSize switch
             {
                 TarotSpreadSize.One => 1,
-                TarotSpreadSize.Three => 2,
-                TarotSpreadSize.Five => 3,
-                TarotSpreadSize.Seven => 4,
-                TarotSpreadSize.Ten => 5,
+                TarotSpreadSize.Three => 3,
+                TarotSpreadSize.Five => 5,
+                TarotSpreadSize.Seven => 7,
+                TarotSpreadSize.Ten => 10,
 
                 _ => throw new AppException("Invalid spread size.", 400)
             };
