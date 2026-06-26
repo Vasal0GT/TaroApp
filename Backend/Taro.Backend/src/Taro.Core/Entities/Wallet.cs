@@ -9,7 +9,7 @@ namespace Taro.Core.Entities
         public Guid Id { get; set; } = Guid.NewGuid();
         public Guid UserId { get; set; }
         public User User { get; set; } = null!;
-        public int Balance { get; set; }
+        public int Balance { get; set; } = 15;
         public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
         public List<WalletTransaction> Transactions { get; set; } = new();
     }
