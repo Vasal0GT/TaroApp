@@ -6,6 +6,15 @@ using Taro.Core.Enums;
 namespace Taro.Core.Modules.Billing.Dtos
 {
     public sealed record BillingAccountDto(SubscriptionTier SubscriptionTier, DateTimeOffset? SubscriptionExpiresAt, int StarsBalance, BillingSubscriptionDto? Subscription);
+    public sealed record BillingPortalAccountDto(
+        Guid UserId,
+        string Email,
+        string? Nickname,
+        SubscriptionTier SubscriptionTier,
+        DateTimeOffset? SubscriptionExpiresAt,
+        int StarsBalance,
+        BillingSubscriptionDto? Subscription);
+
     public sealed record BillingSubscriptionDto(
         Guid Id,
         string PlanCode,
@@ -43,4 +52,10 @@ namespace Taro.Core.Modules.Billing.Dtos
         public string Token { get; init; } = string.Empty;
     }
     public sealed record ExchangeBillingPortalLinkResponse(string PortalAccessToken, DateTimeOffset ExpiresAt);
+
+    public sealed class CreatePortalCheckoutRequest
+    {
+        public string? PlanCode { get; init; }
+        public string? StarPackCode { get; init; }
+    }
 }

@@ -17,6 +17,22 @@ namespace Taro.Core.Modules.Billing.Services
         private const decimal PlusMonthlyPrice = 449m;
         private const int PlusMonthlyStars = 150;
 
+        private static readonly BillingPlan[] BillingPlans =
+        [
+            new("plus_1m", 1, 449m, PlusMonthlyStars),
+            new("plus_3m", 3, 1190m, PlusMonthlyStars),
+            new("plus_6m", 6, 2190m, PlusMonthlyStars),
+            new("plus_12m", 12, 3990m, PlusMonthlyStars)
+        ];
+
+        private static readonly StarPack[] StarPacks =
+        [
+            new("stars_50", 50, 199m),
+            new("stars_120", 120, 399m),
+            new("stars_300", 300, 899m),
+            new("stars_750", 750, 1990m)
+        ];
+
         private readonly IYooKassaClient _yooKassaClient;
         private readonly IAppDbContext _db;
 
@@ -41,6 +57,23 @@ namespace Taro.Core.Modules.Billing.Services
             await _db.SaveChangesAsync(cancellationToken);
 
             return ToAccountDto(user, wallet, subscription);
+        }
+
+        public async Task<BillingPortalAccountDto> GetPortalAccountAsync(Guid userId, CancellationToken cancellationToken = default)
+        {
+            var user = await GetUserAsync(userId, cancellationToken);
+
+            var wallet = await GetOrCreateWalletAsync(
+                userId,
+                cancellationToken);
+
+            var subscription = await GetCurrentSubscriptionAsync(
+                user,
+                cancellationToken);
+
+            await _db.SaveChangesAsync(cancellationToken);
+
+            return ToPortalAccountDto(user, wallet, subscription);
         }
 
         public async Task<BillingAccountDto> ActivatePlusForDevelopmentAsync(Guid userId, int starsPerMonth, CancellationToken cancellationToken = default)
@@ -442,11 +475,44 @@ namespace Taro.Core.Modules.Billing.Services
                         subscription.StarsPerMonth,
                         subscription.NextStarsGrantAt));
         }
+
+        private static BillingPortalAccountDto ToPortalAccountDto(User user, Wallet wallet, Subscription? subscription)
+        {
+            return new BillingPortalAccountDto(
+                user.Id,
+                user.Email,
+                user.Nickname,
+                user.SubscriptionTier,
+                user.SubscriptionExpiresAt,
+                wallet.Balance,
+                subscription is null
+                    ? null
+                    : new BillingSubscriptionDto(
+                        subscription.Id,
+                        subscription.PlanCode,
+                        subscription.Tier,
+                        subscription.Status,
+                        subscription.StartsAt,
+                        subscription.ExpiresAt,
+                        subscription.AutoRenewEnabled,
+                        subscription.NextChargeAt,
+                        subscription.StarsPerMonth,
+                        subscription.NextStarsGrantAt));
+        }
         public async Task<CreateCheckoutResponse> CreatePlusCheckoutAsync(Guid userId, CancellationToken cancellationToken = default)
         {
-            const string planCode = "plus_1m";
-            const decimal amount = 449m;
-
+            return await CreateCheckoutAsync(
+                userId,
+                PlusMonthlyPlanCode,
+                null,
+                cancellationToken);
+        }
+        public async Task<CreateCheckoutResponse> CreateCheckoutAsync(
+            Guid userId,
+            string? planCode,
+            string? starPackCode,
+            CancellationToken cancellationToken = default)
+        {
             var userExists = await _db.Users
                 .AnyAsync(
                     x => x.Id == userId && x.DeletedAt == null,
@@ -457,11 +523,27 @@ namespace Taro.Core.Modules.Billing.Services
                 throw new KeyNotFoundException("User not found.");
             }
 
+            var plan = GetBillingPlanOrNull(planCode);
+            var starPack = GetStarPackOrNull(starPackCode);
+
+            if (plan is null && starPack is null)
+            {
+                throw new AppException(
+                    "Choose a subscription or a stars pack.",
+                    400);
+            }
+
+            var amount =
+                (plan?.Price ?? 0m) +
+                (starPack?.Price ?? 0m);
+
             var paymentOrder = new PaymentOrder
             {
                 UserId = userId,
-                ProductCode = planCode,
-                Kind = PaymentOrderKind.SubscriptionInitial,
+                ProductCode = BuildProductCode(plan, starPack),
+                Kind = plan is null
+                    ? PaymentOrderKind.StarsPurchase
+                    : PaymentOrderKind.SubscriptionInitial,
                 Status = PaymentOrderStatus.Created,
                 Amount = amount,
                 Currency = "RUB",
@@ -482,9 +564,9 @@ namespace Taro.Core.Modules.Billing.Services
                             paymentOrder.Id,
                             paymentOrder.Amount,
                             paymentOrder.Currency,
-                            "Подписка Taro Plus на 1 месяц",
+                            BuildPaymentDescription(plan, starPack),
                             paymentOrder.IdempotenceKey,
-                            SavePaymentMethod: true),
+                            SavePaymentMethod: plan is not null),
                         cancellationToken);
 
                 paymentOrder.YooKassaPaymentId = yooKassaPayment.PaymentId;
@@ -592,28 +674,23 @@ namespace Taro.Core.Modules.Billing.Services
                     400);
             }
 
-            const string plusPlanCode = "plus_1m";
+            var product = ParsePaymentProduct(paymentOrder.ProductCode);
 
-            if (!string.Equals(
-                    paymentOrder.ProductCode,
-                    plusPlanCode,
-                    StringComparison.Ordinal))
-            {
-                throw new AppException(
-                    "Unsupported payment product.",
-                    400);
-            }
+            var subscriptionAlreadyGranted =
+                product.Plan is null ||
+                await _db.WalletTransactions.AnyAsync(
+                    x => x.IdempotencyKey == GetSubscriptionGrantKey(paymentOrder.Id),
+                    cancellationToken);
 
-            var grantIdempotencyKey =
-                $"subscription-grant:{paymentOrder.Id:N}";
-
-            var starsAlreadyGranted = await _db.WalletTransactions
-                .AnyAsync(
-                    x => x.IdempotencyKey == grantIdempotencyKey,
+            var starsAlreadyGranted =
+                product.StarPack is null ||
+                await _db.WalletTransactions.AnyAsync(
+                    x => x.IdempotencyKey == GetStarsPurchaseKey(paymentOrder.Id),
                     cancellationToken);
 
             // Повторный webhook ничего не продлевает и не начисляет второй раз.
             if (paymentOrder.Status == PaymentOrderStatus.Succeeded &&
+                subscriptionAlreadyGranted &&
                 starsAlreadyGranted)
             {
                 return;
@@ -631,99 +708,122 @@ namespace Taro.Core.Modules.Billing.Services
             }
 
             var now = DateTimeOffset.UtcNow;
+            Subscription? subscription = null;
 
-            var subscription = await _db.Subscriptions
-                .Where(x =>
-                    x.UserId == user.Id &&
-                    (x.Status == SubscriptionStatus.Active ||
-                     x.Status == SubscriptionStatus.CancelAtPeriodEnd) &&
-                    x.ExpiresAt > now)
-                .OrderByDescending(x => x.ExpiresAt)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (subscription is null)
+            if (product.Plan is not null)
             {
-                subscription = new Subscription
+                subscription = await _db.Subscriptions
+                    .Where(x =>
+                        x.UserId == user.Id &&
+                        (x.Status == SubscriptionStatus.Active ||
+                         x.Status == SubscriptionStatus.CancelAtPeriodEnd) &&
+                        x.ExpiresAt > now)
+                    .OrderByDescending(x => x.ExpiresAt)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (!subscriptionAlreadyGranted)
                 {
-                    UserId = user.Id,
-                    Tier = SubscriptionTier.Plus,
-                    PlanCode = plusPlanCode,
-                    Status = SubscriptionStatus.Active,
-                    StartsAt = now,
-                    ExpiresAt = now.AddMonths(1),
-                    BillingCycleMonths = 1,
-                    StarsPerMonth = PlusMonthlyStars,
-                    LastStarsGrantAt = now,
-                    NextStarsGrantAt = now.AddMonths(1),
-                    CreatedAt = now
-                };
+                    if (subscription is null)
+                    {
+                        subscription = new Subscription
+                        {
+                            UserId = user.Id,
+                            Tier = SubscriptionTier.Plus,
+                            PlanCode = product.Plan.Code,
+                            Status = SubscriptionStatus.Active,
+                            StartsAt = now,
+                            ExpiresAt = now.AddMonths(product.Plan.Months),
+                            BillingCycleMonths = product.Plan.Months,
+                            StarsPerMonth = product.Plan.StarsPerMonth,
+                            LastStarsGrantAt = now,
+                            NextStarsGrantAt = now.AddMonths(1),
+                            CreatedAt = now
+                        };
 
-                _db.Subscriptions.Add(subscription);
+                        _db.Subscriptions.Add(subscription);
+                    }
+                    else
+                    {
+                        subscription.Tier = SubscriptionTier.Plus;
+                        subscription.PlanCode = product.Plan.Code;
+                        subscription.Status = SubscriptionStatus.Active;
+                        subscription.CanceledAt = null;
+                        subscription.BillingCycleMonths = product.Plan.Months;
+                        subscription.StarsPerMonth = product.Plan.StarsPerMonth;
+                        subscription.ExpiresAt = subscription.ExpiresAt.AddMonths(product.Plan.Months);
+                        subscription.LastStarsGrantAt = now;
+
+                        if (subscription.NextStarsGrantAt is null ||
+                            subscription.NextStarsGrantAt <= now)
+                        {
+                            subscription.NextStarsGrantAt = now.AddMonths(1);
+                        }
+                    }
+
+                    if (subscription.NextStarsGrantAt >= subscription.ExpiresAt)
+                    {
+                        subscription.NextStarsGrantAt = null;
+                    }
+
+                    if (providerPayment.PaymentMethodSaved &&
+                        !string.IsNullOrWhiteSpace(providerPayment.PaymentMethodId))
+                    {
+                        subscription.YooKassaPaymentMethodId =
+                            providerPayment.PaymentMethodId;
+                    }
+
+                    subscription.AutoRenewEnabled =
+                        !string.IsNullOrWhiteSpace(
+                            subscription.YooKassaPaymentMethodId);
+
+                    subscription.NextChargeAt = subscription.AutoRenewEnabled
+                        ? subscription.ExpiresAt
+                        : null;
+
+                    user.SubscriptionTier = SubscriptionTier.Plus;
+                    user.SubscriptionExpiresAt = subscription.ExpiresAt;
+
+                    var wallet = await GetOrCreateWalletAsync(
+                        user.Id,
+                        cancellationToken);
+
+                    AddWalletTransaction(
+                        wallet,
+                        user.Id,
+                        product.Plan.StarsPerMonth,
+                        WalletTransactionReason.SubscriptionGrant,
+                        paymentOrder.Id,
+                        GetSubscriptionGrantKey(paymentOrder.Id),
+                        now);
+                }
             }
-            else
-            {
-                subscription.Tier = SubscriptionTier.Plus;
-                subscription.PlanCode = plusPlanCode;
-                subscription.Status = SubscriptionStatus.Active;
-                subscription.CanceledAt = null;
-                subscription.BillingCycleMonths = 1;
-                subscription.StarsPerMonth = PlusMonthlyStars;
-                subscription.ExpiresAt = subscription.ExpiresAt.AddMonths(1);
-                subscription.LastStarsGrantAt = now;
-                subscription.NextStarsGrantAt = subscription.ExpiresAt;
-            }
 
-            if (providerPayment.PaymentMethodSaved &&
-                !string.IsNullOrWhiteSpace(providerPayment.PaymentMethodId))
-            {
-                subscription.YooKassaPaymentMethodId =
-                    providerPayment.PaymentMethodId;
-            }
-
-            subscription.AutoRenewEnabled =
-                !string.IsNullOrWhiteSpace(
-                    subscription.YooKassaPaymentMethodId);
-
-            subscription.NextChargeAt = subscription.AutoRenewEnabled
-                ? subscription.ExpiresAt
-                : null;
-
-            user.SubscriptionTier = SubscriptionTier.Plus;
-            user.SubscriptionExpiresAt = subscription.ExpiresAt;
-
-            paymentOrder.Subscription = subscription;
-            paymentOrder.Status = PaymentOrderStatus.Succeeded;
-            paymentOrder.PaidAt = now;
-            paymentOrder.FailureReason = null;
-            paymentOrder.RawProviderPayload = providerPayment.RawJson;
-
-            if (!starsAlreadyGranted)
+            if (product.StarPack is not null && !starsAlreadyGranted)
             {
                 var wallet = await GetOrCreateWalletAsync(
                     user.Id,
                     cancellationToken);
 
-                wallet.Balance += PlusMonthlyStars;
-                wallet.UpdatedAt = now;
-
-                _db.WalletTransactions.Add(new WalletTransaction
-                {
-                    WalletId = wallet.Id,
-                    UserId = user.Id,
-
-                    Delta = PlusMonthlyStars,
-                    BalanceAfter = wallet.Balance,
-
-                    Reason = WalletTransactionReason.SubscriptionGrant,
-                    SourceId = paymentOrder.Id,
-
-                    IdempotencyKey = grantIdempotencyKey,
-                    CreatedAt = now
-                });
+                AddWalletTransaction(
+                    wallet,
+                    user.Id,
+                    product.StarPack.Stars,
+                    WalletTransactionReason.StarsPurchase,
+                    paymentOrder.Id,
+                    GetStarsPurchaseKey(paymentOrder.Id),
+                    now);
             }
 
-            // Одно сохранение:
-            // PaymentOrder + Subscription + User + Wallet + WalletTransaction.
+            if (subscription is not null)
+            {
+                paymentOrder.Subscription = subscription;
+            }
+
+            paymentOrder.Status = PaymentOrderStatus.Succeeded;
+            paymentOrder.PaidAt = now;
+            paymentOrder.FailureReason = null;
+            paymentOrder.RawProviderPayload = providerPayment.RawJson;
+
             await _db.SaveChangesAsync(cancellationToken);
         }
         public async Task ProcessYooKassaPaymentCanceledAsync(string yooKassaPaymentId, CancellationToken cancellationToken = default)
@@ -892,5 +992,183 @@ namespace Taro.Core.Modules.Billing.Services
             return Convert.ToHexString(
                 SHA256.HashData(bytes));
         }
+
+        private static BillingPlan? GetBillingPlanOrNull(string? planCode)
+        {
+            var normalizedPlanCode = NormalizeProductCode(planCode);
+
+            if (normalizedPlanCode is null)
+            {
+                return null;
+            }
+
+            var plan = BillingPlans.FirstOrDefault(
+                x => x.Code == normalizedPlanCode);
+
+            if (plan is null)
+            {
+                throw new AppException(
+                    "Unsupported subscription plan.",
+                    400);
+            }
+
+            return plan;
+        }
+
+        private static StarPack? GetStarPackOrNull(string? starPackCode)
+        {
+            var normalizedStarPackCode = NormalizeProductCode(starPackCode);
+
+            if (normalizedStarPackCode is null)
+            {
+                return null;
+            }
+
+            var starPack = StarPacks.FirstOrDefault(
+                x => x.Code == normalizedStarPackCode);
+
+            if (starPack is null)
+            {
+                throw new AppException(
+                    "Unsupported stars pack.",
+                    400);
+            }
+
+            return starPack;
+        }
+
+        private static string? NormalizeProductCode(string? productCode)
+        {
+            if (string.IsNullOrWhiteSpace(productCode))
+            {
+                return null;
+            }
+
+            var normalized = productCode.Trim();
+
+            return string.Equals(
+                normalized,
+                "none",
+                StringComparison.OrdinalIgnoreCase)
+                ? null
+                : normalized;
+        }
+
+        private static string BuildProductCode(
+            BillingPlan? plan,
+            StarPack? starPack)
+        {
+            return string.Join(
+                "+",
+                new[]
+                {
+                    plan?.Code,
+                    starPack?.Code
+                }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        }
+
+        private static string BuildPaymentDescription(
+            BillingPlan? plan,
+            StarPack? starPack)
+        {
+            if (plan is not null && starPack is not null)
+            {
+                return
+                    $"Подписка Taro Plus на {plan.Months} {GetMonthsWord(plan.Months)} и {starPack.Stars} звёзд";
+            }
+
+            if (plan is not null)
+            {
+                return
+                    $"Подписка Taro Plus на {plan.Months} {GetMonthsWord(plan.Months)}";
+            }
+
+            if (starPack is not null)
+            {
+                return $"Пакет {starPack.Stars} звёзд Taro";
+            }
+
+            return "Покупка Taro";
+        }
+
+        private static PaymentProduct ParsePaymentProduct(string productCode)
+        {
+            BillingPlan? plan = null;
+            StarPack? starPack = null;
+
+            var parts = productCode
+                .Split(
+                    '+',
+                    StringSplitOptions.RemoveEmptyEntries |
+                    StringSplitOptions.TrimEntries);
+
+            foreach (var part in parts)
+            {
+                var matchedPlan = BillingPlans.FirstOrDefault(
+                    x => x.Code == part);
+
+                if (matchedPlan is not null)
+                {
+                    plan = matchedPlan;
+                    continue;
+                }
+
+                var matchedStarPack = StarPacks.FirstOrDefault(
+                    x => x.Code == part);
+
+                if (matchedStarPack is not null)
+                {
+                    starPack = matchedStarPack;
+                    continue;
+                }
+
+                throw new AppException(
+                    "Unsupported payment product.",
+                    400);
+            }
+
+            if (plan is null && starPack is null)
+            {
+                throw new AppException(
+                    "Unsupported payment product.",
+                    400);
+            }
+
+            return new PaymentProduct(plan, starPack);
+        }
+
+        private static string GetSubscriptionGrantKey(Guid paymentOrderId)
+        {
+            return $"subscription-grant:{paymentOrderId:N}";
+        }
+
+        private static string GetStarsPurchaseKey(Guid paymentOrderId)
+        {
+            return $"stars-purchase:{paymentOrderId:N}";
+        }
+
+        private static string GetMonthsWord(int months)
+        {
+            return months == 1
+                ? "месяц"
+                : months is >= 2 and <= 4
+                    ? "месяца"
+                    : "месяцев";
+        }
+
+        private sealed record BillingPlan(
+            string Code,
+            int Months,
+            decimal Price,
+            int StarsPerMonth);
+
+        private sealed record StarPack(
+            string Code,
+            int Stars,
+            decimal Price);
+
+        private sealed record PaymentProduct(
+            BillingPlan? Plan,
+            StarPack? StarPack);
     }
 }

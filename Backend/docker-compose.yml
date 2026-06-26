@@ -1,120 +1,141 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: taro-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - taro_caddy_data:/data
+      - taro_caddy_config:/config
+    depends_on:
+      - api
+      - billing-portal
+
   postgres:
     image: postgres:16
     container_name: taro-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: taro
-      POSTGRES_USER: taro
-      POSTGRES_PASSWORD: taro
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${POSTGRES_DB:-taro}
+      POSTGRES_USER: ${POSTGRES_USER:-taro}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - taro_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U taro -d taro"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-taro} -d ${POSTGRES_DB:-taro}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  mailpit:
-    image: axllent/mailpit:latest
-    container_name: taro-mailpit
-    ports:
-      - "8025:8025"
-      - "1025:1025"
-
   rabbitmq:
     image: rabbitmq:3-management
     container_name: taro-rabbitmq
+    restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: taro
-      RABBITMQ_DEFAULT_PASS: taro
-    ports:
-      - "5672:5672"
-      - "15672:15672"
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-taro}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    volumes:
+      - taro_rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 5s
       timeout: 5s
       retries: 10
 
+  billing-portal:
+    container_name: taro-billing-portal
+    restart: unless-stopped
+    build:
+      context: ../BillingPortal
+      dockerfile: Dockerfile
+    environment:
+      PORT: "3000"
+      API_BASE_URL: ${BILLING_PORTAL_API_BASE_URL:-https://api.taro-path-app.online}
+    expose:
+      - "3000"
+
   api:
     container_name: taro-api
+    restart: unless-stopped
     build:
       context: ./Taro.Backend
       dockerfile: src/Taro.Api/Dockerfile
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
 
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=taro;Username=taro;Password=taro
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${POSTGRES_DB:-taro};Username=${POSTGRES_USER:-taro};Password=${POSTGRES_PASSWORD}
 
-      Jwt__Issuer: Taro
-      Jwt__Audience: Taro.Mobile
-      Jwt__Secret: THIS_IS_DEV_SECRET_CHANGE_IT_LATER_1234567890_ABCDE
+      Jwt__Issuer: ${JWT_ISSUER:-Taro}
+      Jwt__Audience: ${JWT_AUDIENCE:-Taro.Mobile}
+      Jwt__Secret: ${JWT_SECRET}
       Jwt__AccessTokenMinutes: "15"
 
-      Mail__Host: mailpit
-      Mail__Port: "1025"
-      Mail__UseSsl: "false"
-      Mail__Username: ""
-      Mail__Password: ""
-      Mail__FromEmail: no-reply@taro.local
-      Mail__FromName: Taro
+      Mail__Host: smtp.mail.ru
+      Mail__Port: "465"
+      Mail__UseSsl: "true"
+      Mail__Username: ${MAIL_SMTP_USERNAME}
+      Mail__Password: ${MAIL_SMTP_PASSWORD}
+      Mail__FromEmail: ${MAIL_SMTP_USERNAME}
+      Mail__FromName: ${MAIL_FROM_NAME:-Taro}
 
-      ExternalAuth__GoogleAudiences__0: YOUR_GOOGLE_WEB_CLIENT_ID.apps.googleusercontent.com
-      ExternalAuth__GoogleAudiences__1: YOUR_GOOGLE_IOS_CLIENT_ID.apps.googleusercontent.com
-      ExternalAuth__GoogleAudiences__2: YOUR_GOOGLE_ANDROID_CLIENT_ID.apps.googleusercontent.com
+      ExternalAuth__GoogleAudiences__0: ${GOOGLE_WEB_CLIENT_ID}
+      ExternalAuth__GoogleAudiences__1: ${GOOGLE_IOS_CLIENT_ID}
+      ExternalAuth__GoogleAudiences__2: ${GOOGLE_ANDROID_CLIENT_ID}
 
-      ExternalAuth__AppleAudiences__0: host.exp.Exponent
-      ExternalAuth__AppleAudiences__1: com.sasha.taro
+      ExternalAuth__AppleAudiences__0: ${APPLE_EXPO_AUDIENCE:-host.exp.Exponent}
+      ExternalAuth__AppleAudiences__1: ${APPLE_BUNDLE_ID:-com.sasha.taro}
 
       RabbitMQ__Host: rabbitmq
-      RabbitMQ__Username: taro
-      RabbitMQ__Password: taro
-      RabbitMQ__QueueName: tarot-readings
+      RabbitMQ__Username: ${RABBITMQ_DEFAULT_USER:-taro}
+      RabbitMQ__Password: ${RABBITMQ_DEFAULT_PASS}
+      RabbitMQ__QueueName: ${RABBITMQ_QUEUE_NAME:-tarot-readings}
 
-      YooKassa__ShopId: 1392577
-      YooKassa__SecretKey: test_5dby668PwfF9UGJCogYuI39Se633xkgGo_wd2vZnaeg
-      YooKassa__ReturnUrl: https://example.com/payment-return
+      YooKassa__ShopId: ${YOOKASSA_SHOP_ID}
+      YooKassa__SecretKey: ${YOOKASSA_SECRET_KEY}
+      YooKassa__ReturnUrl: ${YOOKASSA_RETURN_URL:-https://pay.taro-path-app.online/payment-result}
 
-      BillingPortal__BaseUrl: http://localhost:3000
+      BillingPortal__BaseUrl: ${BILLING_PORTAL_BASE_URL:-https://pay.taro-path-app.online}
       BillingPortal__AccessTokenMinutes: "120"
-    ports:
-      - "5000:8080"
+    expose:
+      - "8080"
+    volumes:
+      - taro_data_protection_keys:/root/.aspnet/DataProtection-Keys
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      mailpit:
-        condition: service_started
 
   worker:
     container_name: taro-worker
+    restart: unless-stopped
     build:
       context: ./Taro.Backend
       dockerfile: src/Taro.Worker/Dockerfile
     environment:
-      DOTNET_ENVIRONMENT: Development
+      DOTNET_ENVIRONMENT: Production
 
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=taro;Username=taro;Password=taro
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${POSTGRES_DB:-taro};Username=${POSTGRES_USER:-taro};Password=${POSTGRES_PASSWORD}
 
       RabbitMQ__Host: rabbitmq
-      RabbitMQ__Username: taro
-      RabbitMQ__Password: taro
-      RabbitMQ__QueueName: tarot-readings
+      RabbitMQ__Username: ${RABBITMQ_DEFAULT_USER:-taro}
+      RabbitMQ__Password: ${RABBITMQ_DEFAULT_PASS}
+      RabbitMQ__QueueName: ${RABBITMQ_QUEUE_NAME:-tarot-readings}
 
       OpenAI__ApiKey: ${OPENAI_API_KEY}
-      OpenAI__Model: gpt-5.4-mini
+      OpenAI__Model: ${OPENAI_MODEL:-gpt-5.4-mini}
 
-      YooKassa__ShopId: 1392577
-      YooKassa__SecretKey: test_5dby668PwfF9UGJCogYuI39Se633xkgGo_wd2vZnaeg
-      YooKassa__ReturnUrl: https://example.com/payment-return
+      YooKassa__ShopId: ${YOOKASSA_SHOP_ID}
+      YooKassa__SecretKey: ${YOOKASSA_SECRET_KEY}
+      YooKassa__ReturnUrl: ${YOOKASSA_RETURN_URL:-https://pay.taro-path-app.online/payment-result}
 
-      ReadingWorker__OpenAiRequestsPerSecond: "7"
-      ReadingWorker__ConcurrentMessageLimit: "20"
-      ReadingWorker__PrefetchCount: "20"
+      ReadingWorker__OpenAiRequestsPerSecond: ${READING_WORKER_OPENAI_RPS:-7}
+      ReadingWorker__ConcurrentMessageLimit: ${READING_WORKER_CONCURRENT_LIMIT:-20}
+      ReadingWorker__PrefetchCount: ${READING_WORKER_PREFETCH_COUNT:-20}
 
       OpenAI__MaxAttempts: "4"
       OpenAI__RetryBaseDelaySeconds: "2"
@@ -127,3 +148,7 @@ services:
 
 volumes:
   taro_postgres_data:
+  taro_rabbitmq_data:
+  taro_caddy_data:
+  taro_caddy_config:
+  taro_data_protection_keys:

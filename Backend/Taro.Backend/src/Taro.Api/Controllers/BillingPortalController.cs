@@ -38,11 +38,11 @@ namespace Taro.Api.Controllers
         }
 
         [HttpGet("me")]
-        public async Task<ActionResult<BillingAccountDto>> GetMe(CancellationToken cancellationToken)
+        public async Task<ActionResult<BillingPortalAccountDto>> GetMe(CancellationToken cancellationToken)
         {
             var userId = GetPortalUserId();
 
-            var account = await _billingService.GetAccountAsync(
+            var account = await _billingService.GetPortalAccountAsync(
                 userId,
                 cancellationToken);
 
@@ -57,6 +57,23 @@ namespace Taro.Api.Controllers
             var checkout = await _billingService
                 .CreatePlusCheckoutAsync(
                     userId,
+                    cancellationToken);
+
+            return Ok(checkout);
+        }
+
+        [HttpPost("checkout")]
+        public async Task<ActionResult<CreateCheckoutResponse>> CreateCheckout(
+            [FromBody] CreatePortalCheckoutRequest request,
+            CancellationToken cancellationToken)
+        {
+            var userId = GetPortalUserId();
+
+            var checkout = await _billingService
+                .CreateCheckoutAsync(
+                    userId,
+                    request.PlanCode,
+                    request.StarPackCode,
                     cancellationToken);
 
             return Ok(checkout);

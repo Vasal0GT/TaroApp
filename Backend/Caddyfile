@@ -1,0 +1,11 @@
+api.taro-path-app.online {
+	reverse_proxy api:8080
+}
+
+pay.taro-path-app.online {
+	reverse_proxy billing-portal:3000
+}
+
+taro-path-app.online {
+	redir https://pay.taro-path-app.online{uri} permanent
+}

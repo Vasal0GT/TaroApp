@@ -101,6 +101,28 @@ namespace Taro.Api
 
             builder.Services.AddEndpointsApiExplorer();
 
+            var allowedCorsOrigins = new[]
+                {
+                    builder.Configuration["BillingPortal:BaseUrl"],
+                    "http://localhost:3000",
+                    "http://127.0.0.1:3000"
+                }
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x!.Trim().TrimEnd('/'))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            builder.Services.AddCors(options =>
+            {
+                options.AddDefaultPolicy(policy =>
+                {
+                    policy
+                        .WithOrigins(allowedCorsOrigins)
+                        .AllowAnyHeader()
+                        .AllowAnyMethod();
+                });
+            });
+
             var app = builder.Build();
 
             using (var scope = app.Services.CreateScope())
@@ -110,6 +132,8 @@ namespace Taro.Api
             }
 
             app.UseMiddleware<ExceptionMiddleware>();
+
+            app.UseCors();
 
             app.UseAuthentication();
             app.UseAuthorization();

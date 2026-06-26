@@ -8,6 +8,7 @@ namespace Taro.Core.Interfaces
     public interface IBillingService
     {
         Task<BillingAccountDto> GetAccountAsync(Guid userId, CancellationToken cancellationToken = default);
+        Task<BillingPortalAccountDto> GetPortalAccountAsync(Guid userId, CancellationToken cancellationToken = default);
         // Временный метод: имитирует успешную оплату Plus за 449 ₽.
         Task<BillingAccountDto> ActivatePlusForDevelopmentAsync(Guid userId, int starsPerMonth, CancellationToken cancellationToken = default);
         Task<BillingAccountDto> SetAutoRenewAsync(Guid userId, Guid subscriptionId, bool enabled, CancellationToken cancellationToken = default);
@@ -20,6 +21,7 @@ namespace Taro.Core.Interfaces
         Task<int> GrantDueSubscriptionStarsAsync(DateTimeOffset now, CancellationToken cancellationToken = default);
 
         Task<CreateCheckoutResponse> CreatePlusCheckoutAsync(Guid userId, CancellationToken cancellationToken = default);
+        Task<CreateCheckoutResponse> CreateCheckoutAsync(Guid userId, string? planCode, string? starPackCode, CancellationToken cancellationToken = default);
         Task ProcessYooKassaPaymentSucceededAsync(string yooKassaPaymentId, CancellationToken cancellationToken = default);
         Task ProcessYooKassaPaymentCanceledAsync(string yooKassaPaymentId, CancellationToken cancellationToken = default);
         Task<int> ReconcilePendingYooKassaPaymentsAsync(CancellationToken cancellationToken = default);
