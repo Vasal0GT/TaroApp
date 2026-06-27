@@ -89,7 +89,7 @@ namespace Taro.Core.Modules.Auth.Services
             {
                 UserId = user.Id,
                 User = user,
-                Balance = 0,
+                Balance = 15,
                 UpdatedAt = DateTimeOffset.UtcNow
             };
 
