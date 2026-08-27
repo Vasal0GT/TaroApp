@@ -79,6 +79,18 @@ namespace Taro.Core.Modules.Account.Services
             return await BuildAuthUserDtoAsync(user, cancellationToken);
         }
 
+        public async Task DeleteAccountAsync(Guid userId, CancellationToken cancellationToken = default)
+        {
+            var user = await _db.Users
+                .FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
+
+            if (user is null)
+                return;
+
+            _db.Users.Remove(user);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
         private async Task<AuthUserDto> BuildAuthUserDtoAsync(User user, CancellationToken cancellationToken)
         {
             var wallet = await _db.Wallets

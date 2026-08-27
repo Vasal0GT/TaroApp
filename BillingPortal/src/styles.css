@@ -552,6 +552,25 @@ a {
   color: rgba(216, 202, 255, 0.4);
 }
 
+.password-rules {
+  display: grid;
+  gap: 6px;
+  margin: -2px 0 4px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 18px;
+  list-style: none;
+}
+
+.password-rules li::before {
+  content: "✓";
+  display: inline-block;
+  width: 20px;
+  color: var(--gold);
+  font-weight: 900;
+}
+
 .auth-switch {
   margin: 16px 0 0;
   color: var(--muted);

@@ -55,8 +55,7 @@ namespace Taro.Core.Modules.Auth.Services
             if (string.IsNullOrWhiteSpace(email))
                 throw new AppException("Email is required.", 400);
 
-            if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
-                throw new AppException("Password must contain at least 8 characters.", 400);
+            ValidatePassword(request.Password);
 
             var existingUser = await _db.Users
                 .FirstOrDefaultAsync(x => x.NormalizedEmail == normalizedEmail, cancellationToken);
@@ -486,11 +485,7 @@ namespace Taro.Core.Modules.Auth.Services
                 throw new AppException("Reset token is required.", 400);
             }
 
-            if (string.IsNullOrWhiteSpace(request.NewPassword) ||
-                request.NewPassword.Length < 8)
-            {
-                throw new AppException("Password must contain at least 8 characters.", 400);
-            }
+            ValidatePassword(request.NewPassword);
 
             var resetTokenHash = _refreshTokenHasher.Hash(request.ResetToken);
 
@@ -712,6 +707,21 @@ namespace Taro.Core.Modules.Auth.Services
                 .ToLowerInvariant();
 
             return _passwordHasher.Hash(randomPassword);
+        }
+
+        private static void ValidatePassword(string password)
+        {
+            if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
+                throw new AppException("Password must contain at least 8 characters.", 400);
+
+            if (!password.Any(char.IsLower))
+                throw new AppException("Password must contain a lowercase letter.", 400);
+
+            if (!password.Any(char.IsUpper))
+                throw new AppException("Password must contain an uppercase letter.", 400);
+
+            if (!password.Any(char.IsDigit))
+                throw new AppException("Password must contain a number.", 400);
         }
     }
 }

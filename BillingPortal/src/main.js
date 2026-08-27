@@ -75,6 +75,8 @@ const state = {
   checkout: loadCheckoutState(),
 };
 
+let authRefreshPromise = null;
+
 window.addEventListener("popstate", () => {
   state.route = getRoute();
   render();
@@ -231,14 +233,10 @@ async function loadMe() {
 async function ensurePortalSessionFromAuth() {
   if (getPortalToken()) return;
 
-  const accessToken = getAuthAccessToken();
-  if (!accessToken) return;
+  if (!getAuthAccessToken() && !getAuthRefreshToken()) return;
 
-  const response = await fetch(`${API_BASE_URL}/api/billing/portal-links`, {
+  const response = await authenticatedFetch(`${API_BASE_URL}/api/billing/portal-links`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
   });
 
   const data = await parseResponse(response);
@@ -250,6 +248,83 @@ async function ensurePortalSessionFromAuth() {
   }
 
   await exchangePortalLinkToken(linkToken);
+}
+
+async function authenticatedFetch(url, options = {}) {
+  let accessToken = getAuthAccessToken();
+
+  if (!accessToken) {
+    accessToken = await refreshAuthTokens();
+  }
+
+  let response = await fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (response.status !== 401) {
+    return response;
+  }
+
+  accessToken = await refreshAuthTokens();
+  response = await fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  return response;
+}
+
+async function refreshAuthTokens() {
+  if (authRefreshPromise) return authRefreshPromise;
+
+  authRefreshPromise = performAuthTokenRefresh().finally(() => {
+    authRefreshPromise = null;
+  });
+
+  return authRefreshPromise;
+}
+
+async function performAuthTokenRefresh() {
+  const refreshToken = getAuthRefreshToken();
+
+  if (!refreshToken) {
+    clearAuthState();
+    throw new Error("Сессия истекла. Войдите в аккаунт ещё раз.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken }),
+  });
+
+  try {
+    const data = await parseResponse(response);
+
+    if (!data?.accessToken || !data?.refreshToken) {
+      throw new Error("Сервер не вернул новые данные сессии.");
+    }
+
+    localStorage.setItem(AUTH_ACCESS_TOKEN_STORAGE_KEY, data.accessToken);
+    localStorage.setItem(AUTH_REFRESH_TOKEN_STORAGE_KEY, data.refreshToken);
+
+    if (data.user) {
+      localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(data.user));
+      state.authUser = data.user;
+    }
+
+    return data.accessToken;
+  } catch (error) {
+    clearAuthState();
+    throw error;
+  }
 }
 
 async function createPayment(button) {
@@ -313,6 +388,13 @@ async function submitAuthForm(form, endpoint) {
 
   state.error = "";
   state.notice = "";
+
+  if (endpoint === "/api/auth/register" && !isPasswordValid(password)) {
+    state.error = "Пароль должен содержать минимум 8 символов, заглавную и строчную буквы и цифру.";
+    render();
+    return;
+  }
+
   setButtonLoading(button, "Проверяем...");
 
   try {
@@ -855,11 +937,10 @@ function renderSupportSection() {
     <section class="section panel">
       <h2 class="section-title">Остались вопросы?</h2>
       <p class="section-copy">
-        Напишите в поддержку. Контакты можно заменить перед публикацией на реальные почту и Telegram.
+        Напишите нам, если нужна помощь со входом, подпиской или оплатой.
       </p>
       <div class="footer-links" style="margin-top: 14px">
-        <a class="support-link" href="mailto:support@example.com">support@example.com <span>→</span></a>
-        <a class="support-link" href="https://t.me/example_support" target="_blank" rel="noreferrer">Telegram поддержки <span>→</span></a>
+        <a class="support-link" href="mailto:taro.path.notifications@mail.ru">taro.path.notifications@mail.ru <span>→</span></a>
       </div>
     </section>
   `;
@@ -953,8 +1034,13 @@ function renderRegisterPage() {
           </label>
           <label class="field">
             <span>Пароль</span>
-            <input name="password" type="password" autocomplete="new-password" required minlength="8" placeholder="Минимум 8 символов" />
+            <input name="password" type="password" autocomplete="new-password" required minlength="8" placeholder="Придумайте пароль" />
           </label>
+          <ul class="password-rules" aria-label="Требования к паролю">
+            <li>не менее 8 символов</li>
+            <li>заглавная и строчная буквы</li>
+            <li>хотя бы одна цифра</li>
+          </ul>
           <button class="button" type="submit">Зарегистрироваться</button>
         </form>
         <p class="auth-switch">Уже есть аккаунт? <a href="/login" data-link>Войти</a></p>
@@ -1076,6 +1162,10 @@ function getAuthAccessToken() {
   return localStorage.getItem(AUTH_ACCESS_TOKEN_STORAGE_KEY);
 }
 
+function getAuthRefreshToken() {
+  return localStorage.getItem(AUTH_REFRESH_TOKEN_STORAGE_KEY);
+}
+
 function loadAuthUser() {
   try {
     return JSON.parse(localStorage.getItem(AUTH_USER_STORAGE_KEY) || "null");
@@ -1158,6 +1248,15 @@ function getErrorMessage(error) {
   return error instanceof Error && error.message.trim()
     ? error.message
     : "Не удалось выполнить действие.";
+}
+
+function isPasswordValid(password) {
+  return (
+    password.length >= 8 &&
+    /[a-zа-яё]/u.test(password) &&
+    /[A-ZА-ЯЁ]/u.test(password) &&
+    /\d/u.test(password)
+  );
 }
 
 function escapeHtml(value) {

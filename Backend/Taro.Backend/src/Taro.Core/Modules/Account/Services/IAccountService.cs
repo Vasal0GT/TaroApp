@@ -11,5 +11,6 @@ namespace Taro.Core.Interfaces
     {
         Task<AuthUserDto> GetMeAsync(Guid userId, CancellationToken cancellationToken = default);
         Task<AuthUserDto> CompleteOnboardingAsync(Guid userId, CompleteOnboardingRequest request, CancellationToken cancellationToken = default);
+        Task DeleteAccountAsync(Guid userId, CancellationToken cancellationToken = default);
     }
 }

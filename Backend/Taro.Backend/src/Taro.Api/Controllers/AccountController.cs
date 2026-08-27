@@ -47,6 +47,16 @@ namespace Taro.Api.Controllers
             return Ok(response);
         }
 
+        [HttpDelete]
+        public async Task<IActionResult> DeleteAccount(CancellationToken cancellationToken)
+        {
+            await _accountService.DeleteAccountAsync(
+                GetCurrentUserId(),
+                cancellationToken);
+
+            return NoContent();
+        }
+
         private Guid GetCurrentUserId()
         {
             var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
