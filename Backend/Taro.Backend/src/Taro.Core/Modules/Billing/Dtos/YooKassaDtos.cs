@@ -13,6 +13,14 @@ namespace Taro.Core.Modules.Billing.Dtos
             string IdempotenceKey,
             bool SavePaymentMethod);
 
+        public sealed record YooKassaCreateRecurringPaymentRequest(
+            Guid PaymentOrderId,
+            decimal Amount,
+            string Currency,
+            string Description,
+            string IdempotenceKey,
+            string PaymentMethodId);
+
         public sealed record YooKassaCreatePaymentResult(
             string PaymentId,
             string Status,

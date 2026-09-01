@@ -35,6 +35,10 @@ namespace Taro.Core.Entities
         // Сохранённый способ оплаты YooKassa для автопродления.
         public string? YooKassaPaymentMethodId { get; set; }
 
+        public int RenewalFailureCount { get; set; }
+
+        public DateTimeOffset? LastRenewalAttemptAt { get; set; }
+
         // Сколько звёзд давать каждый месяц по этому тарифу.
         public int StarsPerMonth { get; set; }
 

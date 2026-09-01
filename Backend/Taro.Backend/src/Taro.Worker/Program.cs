@@ -38,6 +38,7 @@ namespace Taro.Worker
             builder.Services.AddInfrastructure(builder.Configuration);
 
             builder.Services.AddHostedService<YooKassaReconciliationHostedService>();
+            builder.Services.AddHostedService<SubscriptionRenewalHostedService>();
 
             builder.Services.AddMassTransit(x =>
             {

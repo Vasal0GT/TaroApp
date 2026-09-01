@@ -63,9 +63,7 @@ namespace Taro.Api.Controllers
         }
 
         [HttpPost("checkout")]
-        public async Task<ActionResult<CreateCheckoutResponse>> CreateCheckout(
-            [FromBody] CreatePortalCheckoutRequest request,
-            CancellationToken cancellationToken)
+        public async Task<ActionResult<CreateCheckoutResponse>> CreateCheckout([FromBody] CreatePortalCheckoutRequest request, CancellationToken cancellationToken)
         {
             var userId = GetPortalUserId();
 
@@ -74,6 +72,7 @@ namespace Taro.Api.Controllers
                     userId,
                     request.PlanCode,
                     request.StarPackCode,
+                    request.AutoRenewEnabled,
                     cancellationToken);
 
             return Ok(checkout);

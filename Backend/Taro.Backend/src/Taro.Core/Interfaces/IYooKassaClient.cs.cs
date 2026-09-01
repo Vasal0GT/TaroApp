@@ -8,6 +8,7 @@ namespace Taro.Core.Interfaces
     public interface IYooKassaClient
     {
         Task<YooKassaCreatePaymentResult> CreateRedirectPaymentAsync(YooKassaCreatePaymentRequest request, CancellationToken cancellationToken = default);
+        Task<YooKassaCreatePaymentResult> CreateRecurringPaymentAsync(YooKassaCreateRecurringPaymentRequest request, CancellationToken cancellationToken = default);
         Task<YooKassaPaymentDetails> GetPaymentAsync(string paymentId, CancellationToken cancellationToken = default);
     }
 }

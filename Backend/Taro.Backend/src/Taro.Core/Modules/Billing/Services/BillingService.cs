@@ -224,6 +224,13 @@ namespace Taro.Core.Modules.Billing.Services
                     400);
             }
 
+            if (enabled && string.IsNullOrWhiteSpace(subscription.YooKassaPaymentMethodId))
+            {
+                throw new AppException(
+                    "To enable auto-renewal, first make a subscription payment with auto-renewal enabled.",
+                    409);
+            }
+
             subscription.AutoRenewEnabled = enabled;
 
             if (enabled)
@@ -231,6 +238,7 @@ namespace Taro.Core.Modules.Billing.Services
                 subscription.Status = SubscriptionStatus.Active;
                 subscription.CanceledAt = null;
                 subscription.NextChargeAt = subscription.ExpiresAt;
+                subscription.RenewalFailureCount = 0;
             }
             else
             {
@@ -416,9 +424,18 @@ namespace Taro.Core.Modules.Billing.Services
                 return subscription;
             }
 
-            subscription.Status = SubscriptionStatus.Expired;
-            subscription.AutoRenewEnabled = false;
-            subscription.NextChargeAt = null;
+            if (subscription.AutoRenewEnabled &&
+                !string.IsNullOrWhiteSpace(subscription.YooKassaPaymentMethodId))
+            {
+                subscription.Status = SubscriptionStatus.PaymentFailed;
+                subscription.NextChargeAt ??= subscription.ExpiresAt;
+            }
+            else
+            {
+                subscription.Status = SubscriptionStatus.Expired;
+                subscription.AutoRenewEnabled = false;
+                subscription.NextChargeAt = null;
+            }
 
             if (user.SubscriptionExpiresAt is null ||
                 user.SubscriptionExpiresAt <= now)
@@ -505,12 +522,14 @@ namespace Taro.Core.Modules.Billing.Services
                 userId,
                 PlusMonthlyPlanCode,
                 null,
+                false,
                 cancellationToken);
         }
         public async Task<CreateCheckoutResponse> CreateCheckoutAsync(
             Guid userId,
             string? planCode,
             string? starPackCode,
+            bool autoRenewEnabled = false,
             CancellationToken cancellationToken = default)
         {
             var userExists = await _db.Users
@@ -545,6 +564,7 @@ namespace Taro.Core.Modules.Billing.Services
                     ? PaymentOrderKind.StarsPurchase
                     : PaymentOrderKind.SubscriptionInitial,
                 Status = PaymentOrderStatus.Created,
+                AutoRenewRequested = plan is not null && autoRenewEnabled,
                 Amount = amount,
                 Currency = "RUB",
                 IdempotenceKey = Guid.NewGuid().ToString("N"),
@@ -566,7 +586,7 @@ namespace Taro.Core.Modules.Billing.Services
                             paymentOrder.Currency,
                             BuildPaymentDescription(plan, starPack),
                             paymentOrder.IdempotenceKey,
-                            SavePaymentMethod: plan is not null),
+                            SavePaymentMethod: paymentOrder.AutoRenewRequested),
                         cancellationToken);
 
                 paymentOrder.YooKassaPaymentId = yooKassaPayment.PaymentId;
@@ -712,14 +732,26 @@ namespace Taro.Core.Modules.Billing.Services
 
             if (product.Plan is not null)
             {
-                subscription = await _db.Subscriptions
-                    .Where(x =>
-                        x.UserId == user.Id &&
-                        (x.Status == SubscriptionStatus.Active ||
-                         x.Status == SubscriptionStatus.CancelAtPeriodEnd) &&
-                        x.ExpiresAt > now)
-                    .OrderByDescending(x => x.ExpiresAt)
-                    .FirstOrDefaultAsync(cancellationToken);
+                if (paymentOrder.Kind == PaymentOrderKind.SubscriptionRenewal &&
+                    paymentOrder.SubscriptionId is not null)
+                {
+                    subscription = await _db.Subscriptions
+                        .FirstOrDefaultAsync(
+                            x => x.Id == paymentOrder.SubscriptionId &&
+                                 x.UserId == user.Id,
+                            cancellationToken);
+                }
+                else
+                {
+                    subscription = await _db.Subscriptions
+                        .Where(x =>
+                            x.UserId == user.Id &&
+                            (x.Status == SubscriptionStatus.Active ||
+                             x.Status == SubscriptionStatus.CancelAtPeriodEnd) &&
+                            x.ExpiresAt > now)
+                        .OrderByDescending(x => x.ExpiresAt)
+                        .FirstOrDefaultAsync(cancellationToken);
+                }
 
                 if (!subscriptionAlreadyGranted)
                 {
@@ -750,7 +782,11 @@ namespace Taro.Core.Modules.Billing.Services
                         subscription.CanceledAt = null;
                         subscription.BillingCycleMonths = product.Plan.Months;
                         subscription.StarsPerMonth = product.Plan.StarsPerMonth;
-                        subscription.ExpiresAt = subscription.ExpiresAt.AddMonths(product.Plan.Months);
+                        var renewalBase = subscription.ExpiresAt > now
+                            ? subscription.ExpiresAt
+                            : now;
+
+                        subscription.ExpiresAt = renewalBase.AddMonths(product.Plan.Months);
                         subscription.LastStarsGrantAt = now;
 
                         if (subscription.NextStarsGrantAt is null ||
@@ -773,12 +809,29 @@ namespace Taro.Core.Modules.Billing.Services
                     }
 
                     subscription.AutoRenewEnabled =
-                        !string.IsNullOrWhiteSpace(
-                            subscription.YooKassaPaymentMethodId);
+                        paymentOrder.Kind == PaymentOrderKind.SubscriptionRenewal
+                            ? subscription.AutoRenewEnabled &&
+                              !string.IsNullOrWhiteSpace(subscription.YooKassaPaymentMethodId)
+                            : paymentOrder.AutoRenewRequested &&
+                              !string.IsNullOrWhiteSpace(subscription.YooKassaPaymentMethodId);
+
+                    subscription.Status = subscription.AutoRenewEnabled
+                        ? SubscriptionStatus.Active
+                        : SubscriptionStatus.CancelAtPeriodEnd;
+
+                    subscription.CanceledAt = subscription.AutoRenewEnabled
+                        ? null
+                        : subscription.CanceledAt ?? now;
 
                     subscription.NextChargeAt = subscription.AutoRenewEnabled
                         ? subscription.ExpiresAt
                         : null;
+
+                    subscription.RenewalFailureCount = 0;
+                    subscription.LastRenewalAttemptAt =
+                        paymentOrder.Kind == PaymentOrderKind.SubscriptionRenewal
+                            ? now
+                            : subscription.LastRenewalAttemptAt;
 
                     user.SubscriptionTier = SubscriptionTier.Plus;
                     user.SubscriptionExpiresAt = subscription.ExpiresAt;
@@ -868,8 +921,187 @@ namespace Taro.Core.Modules.Billing.Services
             paymentOrder.FailureReason = "Payment canceled in YooKassa.";
             paymentOrder.RawProviderPayload = providerPayment.RawJson;
 
+            if (paymentOrder.Kind == PaymentOrderKind.SubscriptionRenewal &&
+                paymentOrder.SubscriptionId is not null)
+            {
+                var subscription = await _db.Subscriptions
+                    .FirstOrDefaultAsync(
+                        x => x.Id == paymentOrder.SubscriptionId,
+                        cancellationToken);
+
+                if (subscription is not null)
+                {
+                    RegisterRenewalFailure(subscription, DateTimeOffset.UtcNow);
+                }
+            }
+
             await _db.SaveChangesAsync(cancellationToken);
         }
+
+        public async Task<int> CreateDueSubscriptionRenewalsAsync(
+            DateTimeOffset now,
+            CancellationToken cancellationToken = default)
+        {
+            const int batchSize = 25;
+
+            var subscriptions = await _db.Subscriptions
+                .Where(x =>
+                    x.AutoRenewEnabled &&
+                    x.NextChargeAt != null &&
+                    x.NextChargeAt <= now &&
+                    x.YooKassaPaymentMethodId != null &&
+                    (x.Status == SubscriptionStatus.Active ||
+                     x.Status == SubscriptionStatus.PaymentFailed))
+                .OrderBy(x => x.NextChargeAt)
+                .Take(batchSize)
+                .ToListAsync(cancellationToken);
+
+            var createdCount = 0;
+
+            foreach (var subscription in subscriptions)
+            {
+                var plan = GetBillingPlanOrNull(subscription.PlanCode);
+                if (plan is null)
+                {
+                    subscription.AutoRenewEnabled = false;
+                    subscription.NextChargeAt = null;
+                    subscription.Status = SubscriptionStatus.PaymentFailed;
+                    continue;
+                }
+
+                var periodEndsAt = subscription.ExpiresAt;
+                var hasPendingAttempt = await _db.PaymentOrders.AnyAsync(
+                    x => x.SubscriptionId == subscription.Id &&
+                         x.Kind == PaymentOrderKind.SubscriptionRenewal &&
+                         x.RenewalPeriodEndsAt == periodEndsAt &&
+                         (x.Status == PaymentOrderStatus.Created ||
+                          x.Status == PaymentOrderStatus.Pending),
+                    cancellationToken);
+
+                if (hasPendingAttempt)
+                {
+                    continue;
+                }
+
+                if (subscription.RenewalFailureCount >= 3)
+                {
+                    subscription.AutoRenewEnabled = false;
+                    subscription.NextChargeAt = null;
+                    subscription.Status = SubscriptionStatus.PaymentFailed;
+                    continue;
+                }
+
+                var attemptNumber = subscription.RenewalFailureCount + 1;
+                var paymentOrder = new PaymentOrder
+                {
+                    UserId = subscription.UserId,
+                    SubscriptionId = subscription.Id,
+                    ProductCode = plan.Code,
+                    Kind = PaymentOrderKind.SubscriptionRenewal,
+                    Status = PaymentOrderStatus.Created,
+                    AutoRenewRequested = true,
+                    RenewalPeriodEndsAt = periodEndsAt,
+                    RenewalAttemptNumber = attemptNumber,
+                    Amount = plan.Price,
+                    Currency = "RUB",
+                    IdempotenceKey = BuildRenewalIdempotenceKey(
+                        subscription.Id,
+                        periodEndsAt,
+                        attemptNumber),
+                    CreatedAt = now
+                };
+
+                _db.PaymentOrders.Add(paymentOrder);
+                subscription.LastRenewalAttemptAt = now;
+                await _db.SaveChangesAsync(cancellationToken);
+
+                try
+                {
+                    var providerPayment = await _yooKassaClient
+                        .CreateRecurringPaymentAsync(
+                            new YooKassaCreateRecurringPaymentRequest(
+                                paymentOrder.Id,
+                                paymentOrder.Amount,
+                                paymentOrder.Currency,
+                                $"Автопродление Plus на {plan.Months} мес.",
+                                paymentOrder.IdempotenceKey,
+                                subscription.YooKassaPaymentMethodId!),
+                            cancellationToken);
+
+                    paymentOrder.YooKassaPaymentId = providerPayment.PaymentId;
+                    paymentOrder.RawProviderPayload = providerPayment.RawJson;
+                    paymentOrder.Status = MapYooKassaPaymentStatus(providerPayment.Status);
+                    await _db.SaveChangesAsync(cancellationToken);
+
+                    if (paymentOrder.Status == PaymentOrderStatus.Succeeded)
+                    {
+                        await ProcessYooKassaPaymentSucceededAsync(
+                            providerPayment.PaymentId,
+                            cancellationToken);
+                    }
+                    else if (paymentOrder.Status is PaymentOrderStatus.Canceled or PaymentOrderStatus.Failed)
+                    {
+                        paymentOrder.CanceledAt = now;
+                        paymentOrder.FailureReason = "Recurring payment was rejected by YooKassa.";
+                        RegisterRenewalFailure(subscription, now);
+                        await _db.SaveChangesAsync(cancellationToken);
+                    }
+
+                    createdCount++;
+                }
+                catch (Exception ex)
+                {
+                    paymentOrder.Status = PaymentOrderStatus.Failed;
+                    paymentOrder.FailureReason = TruncateError(ex.Message);
+                    RegisterRenewalFailure(subscription, now);
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
+            }
+
+            await _db.SaveChangesAsync(cancellationToken);
+            return createdCount;
+        }
+
+        private static void RegisterRenewalFailure(
+            Subscription subscription,
+            DateTimeOffset now)
+        {
+            if (!subscription.AutoRenewEnabled)
+            {
+                subscription.NextChargeAt = null;
+                subscription.Status = subscription.ExpiresAt > now
+                    ? SubscriptionStatus.CancelAtPeriodEnd
+                    : SubscriptionStatus.Expired;
+                return;
+            }
+
+            subscription.RenewalFailureCount++;
+            subscription.LastRenewalAttemptAt = now;
+            subscription.Status = SubscriptionStatus.PaymentFailed;
+
+            if (subscription.RenewalFailureCount >= 3)
+            {
+                subscription.AutoRenewEnabled = false;
+                subscription.NextChargeAt = null;
+                return;
+            }
+
+            subscription.NextChargeAt = subscription.RenewalFailureCount switch
+            {
+                1 => now.AddHours(1),
+                2 => now.AddHours(6),
+                _ => now.AddHours(24)
+            };
+        }
+
+        private static string BuildRenewalIdempotenceKey(
+            Guid subscriptionId,
+            DateTimeOffset periodEndsAt,
+            int attemptNumber)
+        {
+            return $"renew:{subscriptionId:N}:{periodEndsAt:yyyyMMddHHmm}:{attemptNumber}";
+        }
+
         public async Task<int> ReconcilePendingYooKassaPaymentsAsync(CancellationToken cancellationToken = default)
         {
             const int batchSize = 100;

@@ -411,6 +411,13 @@ namespace Taro.Infrastructure.Persistence
                     .HasColumnName("yookassa_payment_method_id")
                     .HasMaxLength(128);
 
+                entity.Property(x => x.RenewalFailureCount)
+                    .HasColumnName("renewal_failure_count")
+                    .HasDefaultValue(0);
+
+                entity.Property(x => x.LastRenewalAttemptAt)
+                    .HasColumnName("last_renewal_attempt_at");
+
                 entity.Property(x => x.StarsPerMonth)
                     .HasColumnName("stars_per_month");
 
@@ -474,6 +481,17 @@ namespace Taro.Infrastructure.Persistence
                     .HasMaxLength(32)
                     .IsRequired();
 
+                entity.Property(x => x.AutoRenewRequested)
+                    .HasColumnName("auto_renew_requested")
+                    .HasDefaultValue(false);
+
+                entity.Property(x => x.RenewalPeriodEndsAt)
+                    .HasColumnName("renewal_period_ends_at");
+
+                entity.Property(x => x.RenewalAttemptNumber)
+                    .HasColumnName("renewal_attempt_number")
+                    .HasDefaultValue(0);
+
                 entity.Property(x => x.Amount)
                     .HasColumnName("amount")
                     .HasPrecision(12, 2);
@@ -519,6 +537,14 @@ namespace Taro.Infrastructure.Persistence
                 entity.HasIndex(x => x.Status);
 
                 entity.HasIndex(x => x.CreatedAt);
+
+                entity.HasIndex(x => new
+                {
+                    x.SubscriptionId,
+                    x.Kind,
+                    x.RenewalPeriodEndsAt,
+                    x.RenewalAttemptNumber
+                }).IsUnique();
 
                 entity.HasIndex(x => x.IdempotenceKey)
                     .IsUnique();

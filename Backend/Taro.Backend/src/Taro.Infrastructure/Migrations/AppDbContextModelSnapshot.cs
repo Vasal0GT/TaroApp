@@ -233,6 +233,12 @@ namespace Taro.Infrastructure.Migrations
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("amount");
 
+                    b.Property<bool>("AutoRenewRequested")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("auto_renew_requested");
+
                     b.Property<DateTimeOffset?>("CanceledAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("canceled_at");
@@ -282,6 +288,16 @@ namespace Taro.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("raw_provider_payload");
 
+                    b.Property<int>("RenewalAttemptNumber")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("renewal_attempt_number");
+
+                    b.Property<DateTimeOffset?>("RenewalPeriodEndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("renewal_period_ends_at");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -317,6 +333,9 @@ namespace Taro.Infrastructure.Migrations
                     b.HasIndex("YooKassaPaymentId")
                         .IsUnique();
 
+                    b.HasIndex("SubscriptionId", "Kind", "RenewalPeriodEndsAt", "RenewalAttemptNumber")
+                        .IsUnique();
+
                     b.ToTable("payment_orders", (string)null);
                 });
 
@@ -349,6 +368,10 @@ namespace Taro.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
+                    b.Property<DateTimeOffset?>("LastRenewalAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_renewal_attempt_at");
+
                     b.Property<DateTimeOffset?>("LastStarsGrantAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_stars_grant_at");
@@ -366,6 +389,12 @@ namespace Taro.Infrastructure.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("plan_code");
+
+                    b.Property<int>("RenewalFailureCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("renewal_failure_count");
 
                     b.Property<int>("StarsPerMonth")
                         .HasColumnType("integer")

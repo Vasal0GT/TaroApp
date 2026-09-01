@@ -17,14 +17,15 @@ namespace Taro.Core.Interfaces
         Task<BillingAccountDto> CancelSubscriptionAsync(Guid userId, Guid subscriptionId, CancellationToken cancellationToken = default);
         // Временный метод для проверки Wallet и WalletTransaction.
         Task<BillingAccountDto> GrantStarsForDevelopmentAsync(Guid userId, int stars, CancellationToken cancellationToken = default);
-        // Его позже вызовет Worker раз в час.
+        // Worker начисляет ежемесячную часть звёзд для длинных тарифов.
         Task<int> GrantDueSubscriptionStarsAsync(DateTimeOffset now, CancellationToken cancellationToken = default);
 
         Task<CreateCheckoutResponse> CreatePlusCheckoutAsync(Guid userId, CancellationToken cancellationToken = default);
-        Task<CreateCheckoutResponse> CreateCheckoutAsync(Guid userId, string? planCode, string? starPackCode, CancellationToken cancellationToken = default);
+        Task<CreateCheckoutResponse> CreateCheckoutAsync(Guid userId, string? planCode, string? starPackCode, bool autoRenewEnabled = false, CancellationToken cancellationToken = default);
         Task ProcessYooKassaPaymentSucceededAsync(string yooKassaPaymentId, CancellationToken cancellationToken = default);
         Task ProcessYooKassaPaymentCanceledAsync(string yooKassaPaymentId, CancellationToken cancellationToken = default);
         Task<int> ReconcilePendingYooKassaPaymentsAsync(CancellationToken cancellationToken = default);
+        Task<int> CreateDueSubscriptionRenewalsAsync(DateTimeOffset now, CancellationToken cancellationToken = default);
         //
         Task<CreateBillingPortalSessionResult> CreateBillingPortalSessionAsync(Guid userId, CancellationToken cancellationToken = default);
         Task<Guid> ConsumeBillingPortalSessionAsync(string token, CancellationToken cancellationToken = default);

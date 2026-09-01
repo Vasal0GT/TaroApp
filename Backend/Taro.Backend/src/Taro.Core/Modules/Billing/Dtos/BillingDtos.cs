@@ -57,5 +57,6 @@ namespace Taro.Core.Modules.Billing.Dtos
     {
         public string? PlanCode { get; init; }
         public string? StarPackCode { get; init; }
+        public bool AutoRenewEnabled { get; init; }
     }
 }

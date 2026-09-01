@@ -117,6 +117,11 @@ document.addEventListener("click", (event) => {
     render();
   }
 
+  if (actionName === "toggle-checkout-auto-renew") {
+    setCheckoutState({ autoRenewEnabled: action.checked });
+    render();
+  }
+
   if (actionName === "stars-only") {
     setCheckoutState({ planCode: "none", starPackCode: "stars_120" });
     navigate("/stars");
@@ -142,6 +147,10 @@ document.addEventListener("click", (event) => {
 
   if (actionName === "create-payment") {
     createPayment(action);
+  }
+
+  if (actionName === "toggle-auto-renew") {
+    updateAutoRenew(action);
   }
 
   if (actionName === "refresh-account") {
@@ -348,21 +357,10 @@ async function createPayment(button) {
       body: JSON.stringify({
         planCode: state.checkout.planCode,
         starPackCode: state.checkout.starPackCode,
+        autoRenewEnabled:
+          state.checkout.planCode !== "none" && state.checkout.autoRenewEnabled,
       }),
     });
-
-    if (response.status === 404 && state.checkout.planCode === "plus_1m") {
-      const fallback = await fetch(`${API_BASE_URL}/api/billing/portal/checkout/plus`, {
-        method: "POST",
-        headers: {
-          "X-Billing-Portal-Token": token,
-        },
-      });
-
-      const fallbackData = await parseResponse(fallback);
-      window.location.href = fallbackData.confirmationUrl;
-      return;
-    }
 
     const data = await parseResponse(response);
     window.location.href = data.confirmationUrl;
@@ -370,6 +368,43 @@ async function createPayment(button) {
     state.error = getErrorMessage(error);
     render();
   }
+}
+
+async function updateAutoRenew(button) {
+  const token = getPortalToken();
+  const subscription = state.me?.subscription;
+  if (!token || !subscription) return;
+
+  const enabled = button.dataset.enabled === "true";
+  button.disabled = true;
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/billing/portal/subscriptions/${subscription.id}/auto-renew`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Billing-Portal-Token": token,
+        },
+        body: JSON.stringify({ enabled }),
+      }
+    );
+
+    await parseResponse(response);
+    await loadMe();
+    state.error = "";
+    state.notice = enabled
+      ? "Автоматическое продление включено."
+      : "Автоматическое продление отключено. Доступ сохранится до конца оплаченного периода.";
+  } catch (error) {
+    const message = getErrorMessage(error);
+    state.error = message.includes("first make a subscription payment")
+      ? "Для включения автопродления сначала оплатите подписку, отметив сохранение способа оплаты."
+      : message;
+  }
+
+  render();
 }
 
 async function submitLogin(form) {
@@ -515,6 +550,7 @@ function renderRoute() {
   if (state.route.path === "/payment-method") return renderPaymentMethodPage();
   if (state.route.path === "/confirm") return renderConfirmPage();
   if (state.route.path === "/payment-result") return renderPaymentResultPage();
+  if (state.route.path === "/privacy") return renderPrivacyPage();
   return renderHomePage();
 }
 
@@ -555,6 +591,12 @@ function renderShell(content, showSticky) {
         ${state.error ? `<section class="notice error">${escapeHtml(state.error)}</section>` : ""}
         ${state.notice ? `<section class="notice">${escapeHtml(state.notice)}</section>` : ""}
         ${content}
+
+        <footer class="site-footer">
+          <span>© 2026 Таро Путь</span>
+          <a href="/privacy" data-link>Политика конфиденциальности</a>
+          <a href="mailto:taro.path.notifications@mail.ru">Поддержка</a>
+        </footer>
       </div>
     </div>
   `;
@@ -670,6 +712,8 @@ function renderSubscriptionPage() {
           }
         </p>
       </section>
+
+      ${active && state.me.subscription ? renderAutoRenewControl(state.me.subscription) : ""}
 
       <section class="section panel">
         <div class="summary-row">
@@ -808,6 +852,9 @@ function renderPaymentMethodPage() {
 }
 
 function renderConfirmPage() {
+  const selectedPlan = getSelectedPlan();
+  const isStarsOnly = state.checkout.planCode === "none";
+
   return `
     <main>
       ${renderPageIntro("Оформление подписки", "Проверьте покупку и перейдите к защищённой оплате.")}
@@ -815,6 +862,30 @@ function renderConfirmPage() {
       <section class="section panel">
         ${renderCheckoutSummary()}
       </section>
+
+      ${
+        isStarsOnly
+          ? ""
+          : `
+            <section class="section">
+              <label class="renewal-consent">
+                <input
+                  type="checkbox"
+                  data-action="toggle-checkout-auto-renew"
+                  ${state.checkout.autoRenewEnabled ? "checked" : ""}
+                />
+                <span>
+                  <strong>Включить автоматическое продление</strong>
+                  <small>
+                    Разрешаю сохранить способ оплаты и списывать ${formatMoney(selectedPlan.price)}
+                    каждые ${selectedPlan.months} ${getMonthWord(selectedPlan.months)}.
+                    Автопродление можно отключить в личном кабинете до следующего списания.
+                  </small>
+                </span>
+              </label>
+            </section>
+          `
+      }
 
       <section class="section notice">
         После нажатия кнопки откроется защищённая страница оплаты. Когда платёж будет
@@ -919,6 +990,33 @@ function renderCheckoutSummary() {
   `;
 }
 
+function renderAutoRenewControl(subscription) {
+  const enabled = subscription.autoRenewEnabled === true;
+  const nextCharge = enabled && subscription.nextChargeAt
+    ? `Следующее списание: ${formatDate(subscription.nextChargeAt)}.`
+    : "Новых автоматических списаний не будет.";
+
+  return `
+    <section class="section renewal-control">
+      <div>
+        <h2 class="section-title">Автопродление</h2>
+        <p class="section-copy">${nextCharge}</p>
+      </div>
+      <button
+        class="renewal-switch ${enabled ? "is-on" : ""}"
+        type="button"
+        role="switch"
+        aria-checked="${enabled}"
+        aria-label="Автоматическое продление"
+        data-action="toggle-auto-renew"
+        data-enabled="${!enabled}"
+      >
+        <span></span>
+      </button>
+    </section>
+  `;
+}
+
 function renderPlusBenefits() {
   return `
     <section class="section panel">
@@ -943,6 +1041,38 @@ function renderSupportSection() {
         <a class="support-link" href="mailto:taro.path.notifications@mail.ru">taro.path.notifications@mail.ru <span>→</span></a>
       </div>
     </section>
+  `;
+}
+
+function renderPrivacyPage() {
+  const sections = [
+    ["Какие данные мы собираем", "Email, nickname, знак зодиака, идентификаторы аккаунта, вопросы и результаты раскладов, историю, статус подписки и баланс звёзд."],
+    ["Зачем используются данные", "Данные нужны для создания и защиты аккаунта, подготовки раскладов, восстановления истории, статистики профиля и работы платных функций."],
+    ["Сторонние сервисы", "Вопрос и контекст расклада могут передаваться сервису искусственного интеллекта для подготовки трактовки. Оплату обрабатывает YooKassa. Полные реквизиты банковской карты мы не получаем и не храним."],
+    ["Хранение и безопасность", "Токены авторизации хранятся в защищённом хранилище устройства. Обмен с сервером выполняется по HTTPS, доступ к данным ограничен работой сервиса «Таро Путь»."],
+    ["Удаление аккаунта и данных", "Удалить аккаунт можно в приложении: Профиль → Опасная зона → Удалить профиль и данные. Внешний запрос на удаление можно отправить на taro.path.notifications@mail.ru. Отдельные сведения об оплатах могут храниться в случаях, предусмотренных законом."],
+    ["Ваши возможности", "Вы можете изменить nickname, знак зодиака и язык, выйти из аккаунта, удалить его или обратиться к нам по вопросам доступа, исправления и удаления данных."],
+  ];
+
+  return `
+    <main class="privacy-page">
+      ${renderPageIntro("Политика конфиденциальности", "Как приложение и платёжный портал «Таро Путь» работают с данными пользователей. Обновлено 27 августа 2026 года.")}
+      <section class="privacy-list">
+        ${sections.map(([title, text], index) => `
+          <article class="privacy-section">
+            <span>${String(index + 1).padStart(2, "0")}</span>
+            <div>
+              <h2>${title}</h2>
+              <p>${text}</p>
+            </div>
+          </article>
+        `).join("")}
+      </section>
+      <section class="privacy-contact">
+        <p>Контакт по вопросам персональных данных</p>
+        <a href="mailto:taro.path.notifications@mail.ru">taro.path.notifications@mail.ru</a>
+      </section>
+    </main>
   `;
 }
 
@@ -1191,12 +1321,14 @@ function loadCheckoutState() {
       planCode: parsed.planCode || getSearchParam("plan") || "plus_1m",
       starPackCode: parsed.starPackCode || getSearchParam("stars") || "none",
       paymentMethod: parsed.paymentMethod || "bank_card",
+      autoRenewEnabled: parsed.autoRenewEnabled === true,
     };
   } catch {
     return {
       planCode: "plus_1m",
       starPackCode: "none",
       paymentMethod: "bank_card",
+      autoRenewEnabled: false,
     };
   }
 }

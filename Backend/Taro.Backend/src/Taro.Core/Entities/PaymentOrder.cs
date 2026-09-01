@@ -24,6 +24,14 @@ namespace Taro.Core.Entities
 
         public PaymentOrderStatus Status { get; set; } = PaymentOrderStatus.Created;
 
+        // Явное согласие пользователя на сохранение способа оплаты и автопродление.
+        public bool AutoRenewRequested { get; set; }
+
+        // Для повторных списаний фиксируем период и номер попытки.
+        public DateTimeOffset? RenewalPeriodEndsAt { get; set; }
+
+        public int RenewalAttemptNumber { get; set; }
+
         public decimal Amount { get; set; }
 
         public string Currency { get; set; } = "RUB";

@@ -96,6 +96,69 @@ namespace Taro.Infrastructure.Payments.YooKassa
                 rawResponse);
         }
 
+        public async Task<YooKassaCreatePaymentResult> CreateRecurringPaymentAsync(
+            YooKassaCreateRecurringPaymentRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            ValidateOptions();
+
+            var payload = new
+            {
+                amount = new
+                {
+                    value = request.Amount.ToString("F2", CultureInfo.InvariantCulture),
+                    currency = request.Currency
+                },
+                capture = true,
+                payment_method_id = request.PaymentMethodId,
+                description = request.Description,
+                metadata = new
+                {
+                    payment_order_id = request.PaymentOrderId.ToString()
+                }
+            };
+
+            var json = JsonSerializer.Serialize(payload);
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "v3/payments")
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+
+            var basicAuthValue = Convert.ToBase64String(
+                Encoding.UTF8.GetBytes($"{_options.ShopId}:{_options.SecretKey}"));
+
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Basic", basicAuthValue);
+            httpRequest.Headers.Add("Idempotence-Key", request.IdempotenceKey);
+
+            using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new AppException(
+                    $"YooKassa could not create recurring payment. HTTP {(int)response.StatusCode}.",
+                    502);
+            }
+
+            var payment = JsonSerializer.Deserialize<YooKassaPaymentResponse>(
+                rawResponse,
+                ResponseJsonOptions);
+
+            if (payment is null || string.IsNullOrWhiteSpace(payment.Id))
+            {
+                throw new AppException(
+                    "YooKassa returned an invalid recurring payment response.",
+                    502);
+            }
+
+            return new YooKassaCreatePaymentResult(
+                payment.Id,
+                payment.Status,
+                payment.Paid,
+                payment.Confirmation?.ConfirmationUrl,
+                rawResponse);
+        }
+
         public async Task<YooKassaPaymentDetails> GetPaymentAsync(string paymentId, CancellationToken cancellationToken = default)
         {
             ValidateOptions();
