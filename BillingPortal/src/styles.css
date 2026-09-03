@@ -151,6 +151,92 @@ body {
 .privacy-contact p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
 .privacy-contact a { color: var(--gold); font-size: 17px; font-weight: 800; }
 
+.checkout-legal-note {
+  max-width: 620px;
+  margin: 14px auto 0;
+  color: var(--muted);
+  text-align: center;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.checkout-legal-note a,
+.legal-inline-link a,
+.legal-requisites a {
+  color: var(--gold);
+}
+
+.legal-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.legal-summary > div {
+  display: grid;
+  gap: 7px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.legal-summary > div:nth-child(odd) {
+  border-right: 1px solid var(--line);
+}
+
+.legal-summary > div:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.legal-summary span,
+.legal-requisites dt {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.legal-summary strong {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.legal-list {
+  margin-top: 42px;
+}
+
+.legal-inline-link {
+  margin-top: 10px !important;
+}
+
+.legal-requisites {
+  margin-top: 48px;
+  padding-top: 30px;
+  border-top: 1px solid var(--line);
+  scroll-margin-top: 24px;
+}
+
+.legal-requisites dl {
+  margin: 18px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.legal-requisites dl > div {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.38fr) 1fr;
+  gap: 18px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.legal-requisites dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 21px;
+  overflow-wrap: anywhere;
+}
+
 @media (min-width: 760px) {
   .grid.two { grid-template-columns: 1fr 1fr; column-gap: 30px; }
   .plans { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -161,6 +247,30 @@ body {
     font-size: 26px;
     line-height: 1.04;
     overflow-wrap: normal;
+  }
+
+  .legal-page .page-title {
+    font-size: 34px;
+  }
+
+  .legal-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .legal-summary > div,
+  .legal-summary > div:nth-child(odd),
+  .legal-summary > div:nth-last-child(-n + 2) {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .legal-summary > div:last-child {
+    border-bottom: 0;
+  }
+
+  .legal-requisites dl > div {
+    grid-template-columns: 1fr;
+    gap: 5px;
   }
 }
 

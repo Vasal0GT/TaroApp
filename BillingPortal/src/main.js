@@ -1,7 +1,7 @@
 const API_BASE_STORAGE_KEY = "taro.portal.apiBaseUrl";
 const PORTAL_TOKEN_STORAGE_KEY = "taro.portal.accessToken";
 const PORTAL_EXPIRES_STORAGE_KEY = "taro.portal.expiresAt";
-const CHECKOUT_STATE_KEY = "taro.portal.checkoutState";
+const CHECKOUT_STATE_KEY = "taro.portal.checkoutState.v2";
 const AUTH_ACCESS_TOKEN_STORAGE_KEY = "taro.portal.authAccessToken";
 const AUTH_REFRESH_TOKEN_STORAGE_KEY = "taro.portal.authRefreshToken";
 const AUTH_USER_STORAGE_KEY = "taro.portal.authUser";
@@ -15,6 +15,16 @@ const API_BASE_URL =
 const logoUrl = "/assets/inner-icon.png";
 const cardBackUrl = "/assets/card-back.png";
 const cardFrontUrl = "/assets/card-front.png";
+
+// TODO before publishing: replace every placeholder below with the real details
+// of the self-employed service provider. YooKassa checks that these are genuine.
+const sellerDetails = {
+  fullName: "Васюта Александр Павлович",
+  inn: "650122553219",
+  status: "Плательщик налога на профессиональный доход (самозанятый)",
+  email: "vaapptaro@mail.ru",
+  postalAddress: "г. Владивосток, Приморский край",
+};
 
 const plans = [
   {
@@ -526,6 +536,8 @@ function resetButtonLoading(button) {
 }
 
 function render() {
+  updatePageMetadata();
+
   if (state.isBootstrapping) {
     app.innerHTML = renderShell(renderLoading(), false);
     return;
@@ -533,6 +545,26 @@ function render() {
 
   const content = renderRoute();
   app.innerHTML = renderShell(content, state.route.path === "/");
+}
+
+function updatePageMetadata() {
+  const isOfferPage = state.route.path === "/offer";
+  let robotsMeta = document.querySelector('meta[name="robots"]');
+
+  document.title = isOfferPage ? "Публичная оферта — Таро Путь" : "Таро Путь";
+
+  if (isOfferPage) {
+    if (!robotsMeta) {
+      robotsMeta = document.createElement("meta");
+      robotsMeta.name = "robots";
+      document.head.appendChild(robotsMeta);
+    }
+
+    robotsMeta.content = "noindex, follow";
+    return;
+  }
+
+  robotsMeta?.remove();
 }
 
 function renderRoute() {
@@ -551,6 +583,7 @@ function renderRoute() {
   if (state.route.path === "/confirm") return renderConfirmPage();
   if (state.route.path === "/payment-result") return renderPaymentResultPage();
   if (state.route.path === "/privacy") return renderPrivacyPage();
+  if (state.route.path === "/offer") return renderOfferPage();
   return renderHomePage();
 }
 
@@ -595,6 +628,7 @@ function renderShell(content, showSticky) {
         <footer class="site-footer">
           <span>© 2026 Таро Путь</span>
           <a href="/privacy" data-link>Политика конфиденциальности</a>
+          <a href="/offer" data-link>Оферта и реквизиты</a>
           <a href="mailto:taro.path.notifications@mail.ru">Поддержка</a>
         </footer>
       </div>
@@ -665,7 +699,7 @@ function renderHomePage() {
 function renderTariffsPage() {
   return `
     <main>
-      ${renderPageIntro("Тарифы", "Выберите срок подписки Plus. Финальные суммы можно будет скорректировать перед подключением к боевой оплате.")}
+      ${renderPageIntro("Тарифы", "Выберите срок подписки Plus. На этой странице указаны актуальные цены и состав каждого предложения.")}
       <section class="section plans">
         ${plans.map((plan) => renderPlanCard(plan)).join("")}
       </section>
@@ -896,6 +930,11 @@ function renderConfirmPage() {
         <button class="button" type="button" data-action="create-payment">Перейти к оплате</button>
         <a class="button secondary" href="/payment-method" data-link>Назад к способам оплаты</a>
       </section>
+      <p class="checkout-legal-note">
+        Нажимая «Перейти к оплате», вы принимаете условия
+        <a href="/offer" data-link>публичной оферты</a> и подтверждаете, что ознакомились
+        с <a href="/privacy" data-link>политикой конфиденциальности</a>.
+      </p>
     </main>
   `;
 }
@@ -1071,6 +1110,116 @@ function renderPrivacyPage() {
       <section class="privacy-contact">
         <p>Контакт по вопросам персональных данных</p>
         <a href="mailto:taro.path.notifications@mail.ru">taro.path.notifications@mail.ru</a>
+      </section>
+    </main>
+  `;
+}
+
+function renderOfferPage() {
+  const sections = [
+    [
+      "Общие положения",
+      `Настоящий документ является публичной офертой физического лица, применяющего специальный налоговый режим «Налог на профессиональный доход», — ${sellerDetails.fullName} (далее — «Исполнитель») — и содержит условия заключения договора возмездного оказания услуг с любым дееспособным физическим лицом (далее — «Заказчик»). Оплата выбранной услуги означает полное и безоговорочное принятие этой оферты.`,
+    ],
+    [
+      "Предмет договора",
+      "Исполнитель предоставляет Заказчику доступ к цифровому сервису «Таро Путь»: функциям приложения, AI-трактовкам раскладов, истории и статистике, а также зачисляет внутренние виртуальные единицы «звёзды» в соответствии с выбранным предложением. Конкретный состав, срок и стоимость услуги указываются на странице тарифов и в заказе до оплаты.",
+    ],
+    [
+      "Характер сервиса",
+      "Материалы и трактовки сервиса носят информационно-развлекательный характер, не являются предсказанием с гарантированным результатом и не заменяют медицинскую, психологическую, юридическую, финансовую или иную профессиональную консультацию. Решения, принятые с учётом материалов сервиса, Заказчик принимает самостоятельно.",
+    ],
+    [
+      "Предложения и цены",
+      "Доступны подписки Plus на 1 месяц за 449 ₽, на 3 месяца за 1 190 ₽, на 6 месяцев за 2 190 ₽ и на 12 месяцев за 3 990 ₽. Каждая подписка включает 150 звёзд в месяц. Отдельно доступны пакеты: 50 звёзд за 199 ₽, 120 звёзд за 399 ₽, 300 звёзд за 899 ₽ и 750 звёзд за 1 990 ₽. Итоговая сумма показывается до оплаты. НДС не облагается в связи с применением Исполнителем режима НПД.",
+    ],
+    [
+      "Оформление и оплата",
+      "Для покупки Заказчик создаёт аккаунт или входит в него, выбирает предложение, проверяет состав заказа и переходит к оплате через ЮKassa. Платёжные данные банковской карты вводятся на стороне платёжного провайдера и Исполнителю не передаются. Обязательство по оплате считается исполненным после подтверждения успешного платежа ЮKassa.",
+    ],
+    [
+      "Получение услуги",
+      "Физическая доставка не требуется. После подтверждения платежа подписка активируется, а приобретённые звёзды зачисляются автоматически в аккаунт «Таро Путь», с которого оформлен заказ. Для получения услуги нужны доступ к этому аккаунту, интернет и совместимое устройство. Если доступ или звёзды не появились после успешной оплаты, Заказчику следует написать в поддержку и приложить сведения о платеже.",
+    ],
+    [
+      "Подписка и автоматическое продление",
+      "Подписка действует в течение выбранного оплаченного периода. Если при оформлении Заказчик отдельно включил автоматическое продление, он соглашается на сохранение способа оплаты и последующие списания стоимости выбранного тарифа в начале каждого нового периода. Отключить автоматическое продление можно в личном кабинете до очередного списания; доступ сохранится до конца уже оплаченного периода.",
+    ],
+    [
+      "Звёзды",
+      "Звёзды используются только внутри сервиса для доступа к раскладам и другим обозначенным функциям. Они не являются денежными средствами или электронными деньгами, не приносят дохода, не подлежат обмену на наличные деньги и не могут быть переданы другому пользователю, если такая возможность прямо не предусмотрена сервисом.",
+    ],
+    [
+      "Отказ, возврат и ошибки платежа",
+      `Заказчик вправе отказаться от договора в порядке, предусмотренном законодательством Российской Федерации, оплатив фактически оказанные услуги и документально подтверждённые расходы Исполнителя. Требование о возврате, сообщение об ошибочном или повторном списании направляется на ${sellerDetails.email} с указанием email аккаунта, даты, суммы и идентификатора платежа. Возврат при наличии оснований производится тем же способом оплаты, если иной порядок не согласован сторонами.`,
+    ],
+    [
+      "Права и обязанности сторон",
+      "Исполнитель обязуется предоставить оплаченный доступ и принимать обращения по работе сервиса. Заказчик обязуется сообщать достоверные данные, обеспечивать конфиденциальность данных входа, не вмешиваться в работу сервиса и не использовать его незаконным способом. Исключительные права на приложение, оформление и материалы сервиса принадлежат Исполнителю или соответствующим правообладателям.",
+    ],
+    [
+      "Ответственность",
+      "Стороны несут ответственность в соответствии с законодательством Российской Федерации. Исполнитель не отвечает за невозможность использования сервиса по причинам на стороне Заказчика, операторов связи, платёжного провайдера или иных независимых систем, но помогает разобраться с подтверждёнными платежами и восстановлением доступа.",
+    ],
+    [
+      "Персональные данные",
+      "Обработка персональных данных выполняется для регистрации аккаунта, исполнения договора, проведения платежей, поддержки и выполнения требований закона. Подробности приведены в политике конфиденциальности. Совершая оплату, Заказчик подтверждает, что ознакомился с ней.",
+    ],
+    [
+      "Обращения и споры",
+      `Обращения принимаются по email ${sellerDetails.email}. Срок ответа на обращение — до 10 календарных дней, если иной срок не установлен законом. Споры решаются путём переговоров, а при недостижении соглашения — в порядке, предусмотренном законодательством Российской Федерации.`,
+    ],
+    [
+      "Срок действия и изменения",
+      "Оферта действует с момента размещения на сайте и до её отзыва. Исполнитель может обновлять условия для будущих заказов. К уже оплаченному периоду применяется редакция, действовавшая в момент оплаты, кроме изменений, обязательных по закону. Дата публикации этой редакции: 3 сентября 2026 года.",
+    ],
+  ];
+
+  return `
+    <main class="legal-page">
+      ${renderPageIntro("Публичная оферта", "Условия оказания цифровых услуг сервиса «Таро Путь», порядок оплаты, получения доступа и возврата средств.")}
+
+      <section class="legal-summary" aria-label="Краткая информация об услуге">
+        <div>
+          <span>Исполнитель</span>
+          <strong>${sellerDetails.fullName}</strong>
+        </div>
+        <div>
+          <span>Статус</span>
+          <strong>${sellerDetails.status}</strong>
+        </div>
+        <div>
+          <span>ИНН</span>
+          <strong>${sellerDetails.inn}</strong>
+        </div>
+        <div>
+          <span>Получение заказа</span>
+          <strong>Автоматически в аккаунте после оплаты</strong>
+        </div>
+      </section>
+
+      <section class="privacy-list legal-list">
+        ${sections.map(([title, text], index) => `
+          <article class="privacy-section">
+            <span>${String(index + 1).padStart(2, "0")}</span>
+            <div>
+              <h2>${title}</h2>
+              <p>${text}</p>
+              ${title === "Персональные данные" ? '<p class="legal-inline-link"><a href="/privacy" data-link>Открыть политику конфиденциальности →</a></p>' : ""}
+            </div>
+          </article>
+        `).join("")}
+      </section>
+
+      <section class="legal-requisites" id="requisites">
+        <p class="eyebrow">Контакты и реквизиты</p>
+        <h2 class="section-title">Исполнитель</h2>
+        <dl>
+          <div><dt>ФИО</dt><dd>${sellerDetails.fullName}</dd></div>
+          <div><dt>Статус</dt><dd>${sellerDetails.status}</dd></div>
+          <div><dt>ИНН</dt><dd>${sellerDetails.inn}</dd></div>
+          <div><dt>Электронная почта</dt><dd><a href="mailto:${sellerDetails.email}">${sellerDetails.email}</a></dd></div>
+        </dl>
       </section>
     </main>
   `;
@@ -1321,14 +1470,14 @@ function loadCheckoutState() {
       planCode: parsed.planCode || getSearchParam("plan") || "plus_1m",
       starPackCode: parsed.starPackCode || getSearchParam("stars") || "none",
       paymentMethod: parsed.paymentMethod || "bank_card",
-      autoRenewEnabled: parsed.autoRenewEnabled === true,
+      autoRenewEnabled: parsed.autoRenewEnabled !== false,
     };
   } catch {
     return {
       planCode: "plus_1m",
       starPackCode: "none",
       paymentMethod: "bank_card",
-      autoRenewEnabled: false,
+      autoRenewEnabled: true,
     };
   }
 }
