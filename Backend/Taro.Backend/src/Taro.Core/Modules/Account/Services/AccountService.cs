@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Taro.Core.Common;
 using Taro.Core.Entities;
+using Taro.Core.Enums;
 using Taro.Core.Interfaces;
 using Taro.Core.Modules.Account.Dtos;
 using Taro.Core.Modules.Auth.Dtos;
@@ -84,10 +85,85 @@ namespace Taro.Core.Modules.Account.Services
             var user = await _db.Users
                 .FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
 
-            if (user is null)
+            if (user is null || user.DeletedAt is not null)
                 return;
 
-            _db.Users.Remove(user);
+            var now = DateTimeOffset.UtcNow;
+
+            var sessions = await _db.UserSessions
+                .Where(x => x.UserId == userId)
+                .ToListAsync(cancellationToken);
+
+            var emailVerificationCodes = await _db.EmailVerificationCodes
+                .Where(x => x.UserId == userId)
+                .ToListAsync(cancellationToken);
+
+            var passwordResetCodes = await _db.PasswordResetCodes
+                .Where(x => x.UserId == userId)
+                .ToListAsync(cancellationToken);
+
+            var passwordResetTokens = await _db.PasswordResetTokens
+                .Where(x => x.UserId == userId)
+                .ToListAsync(cancellationToken);
+
+            var externalAuthAccounts = await _db.ExternalAuthAccounts
+                .Where(x => x.UserId == userId)
+                .ToListAsync(cancellationToken);
+
+            var billingPortalSessions = await _db.BillingPortalSessions
+                .Where(x => x.UserId == userId)
+                .ToListAsync(cancellationToken);
+
+            var subscriptions = await _db.Subscriptions
+                .Where(x => x.UserId == userId)
+                .ToListAsync(cancellationToken);
+
+            var wallet = await _db.Wallets
+                .FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+
+            _db.UserSessions.RemoveRange(sessions);
+            _db.EmailVerificationCodes.RemoveRange(emailVerificationCodes);
+            _db.PasswordResetCodes.RemoveRange(passwordResetCodes);
+            _db.PasswordResetTokens.RemoveRange(passwordResetTokens);
+            _db.ExternalAuthAccounts.RemoveRange(externalAuthAccounts);
+            _db.BillingPortalSessions.RemoveRange(billingPortalSessions);
+
+            foreach (var subscription in subscriptions)
+            {
+                subscription.AutoRenewEnabled = false;
+                subscription.NextChargeAt = null;
+                subscription.NextStarsGrantAt = null;
+                subscription.StarsPerMonth = 0;
+                subscription.YooKassaPaymentMethodId = null;
+
+                if (subscription.Status is SubscriptionStatus.Active
+                    or SubscriptionStatus.CancelAtPeriodEnd
+                    or SubscriptionStatus.PaymentFailed)
+                {
+                    subscription.Status = SubscriptionStatus.Canceled;
+                    subscription.CanceledAt ??= now;
+                }
+            }
+
+            if (wallet is not null)
+            {
+                wallet.Balance = 0;
+                wallet.UpdatedAt = now;
+            }
+
+            var anonymizedEmail = $"deleted-{user.Id:N}@users.invalid";
+
+            user.Email = anonymizedEmail;
+            user.NormalizedEmail = anonymizedEmail.ToUpperInvariant();
+            user.PasswordHash = string.Empty;
+            user.EmailVerifiedAt = null;
+            user.SubscriptionTier = SubscriptionTier.Free;
+            user.SubscriptionExpiresAt = null;
+            user.Nickname = null;
+            user.ZodiacSign = null;
+            user.IsOnboardingCompleted = false;
+            user.DeletedAt = now;
+
             await _db.SaveChangesAsync(cancellationToken);
         }
 

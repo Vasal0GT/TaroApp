@@ -629,7 +629,7 @@ function renderShell(content, showSticky) {
           <span>© 2026 Таро Путь</span>
           <a href="/privacy" data-link>Политика конфиденциальности</a>
           <a href="/offer" data-link>Оферта и реквизиты</a>
-          <a href="mailto:taro.path.notifications@mail.ru">Поддержка</a>
+          <a href="mailto:vaapptaro@mail.ru">Поддержка</a>
         </footer>
       </div>
     </div>
@@ -1077,7 +1077,7 @@ function renderSupportSection() {
         Напишите нам, если нужна помощь со входом, подпиской или оплатой.
       </p>
       <div class="footer-links" style="margin-top: 14px">
-        <a class="support-link" href="mailto:taro.path.notifications@mail.ru">taro.path.notifications@mail.ru <span>→</span></a>
+        <a class="support-link" href="mailto:vaapptaro@mail.ru">vaapptaro@mail.ru <span>→</span></a>
       </div>
     </section>
   `;
@@ -1089,7 +1089,7 @@ function renderPrivacyPage() {
     ["Зачем используются данные", "Данные нужны для создания и защиты аккаунта, подготовки раскладов, восстановления истории, статистики профиля и работы платных функций."],
     ["Сторонние сервисы", "Вопрос и контекст расклада могут передаваться сервису искусственного интеллекта для подготовки трактовки. Оплату обрабатывает YooKassa. Полные реквизиты банковской карты мы не получаем и не храним."],
     ["Хранение и безопасность", "Токены авторизации хранятся в защищённом хранилище устройства. Обмен с сервером выполняется по HTTPS, доступ к данным ограничен работой сервиса «Таро Путь»."],
-    ["Удаление аккаунта и данных", "Удалить аккаунт можно в приложении: Профиль → Опасная зона → Удалить профиль и данные. Внешний запрос на удаление можно отправить на taro.path.notifications@mail.ru. Отдельные сведения об оплатах могут храниться в случаях, предусмотренных законом."],
+    ["Удаление аккаунта и данных", "Удалить аккаунт можно в приложении: Профиль → Опасная зона → Удалить профиль и данные. Внешний запрос на удаление можно отправить на vaapptaro@mail.ru. Отдельные сведения об оплатах могут храниться в случаях, предусмотренных законом."],
     ["Ваши возможности", "Вы можете изменить nickname, знак зодиака и язык, выйти из аккаунта, удалить его или обратиться к нам по вопросам доступа, исправления и удаления данных."],
   ];
 
@@ -1109,7 +1109,7 @@ function renderPrivacyPage() {
       </section>
       <section class="privacy-contact">
         <p>Контакт по вопросам персональных данных</p>
-        <a href="mailto:taro.path.notifications@mail.ru">taro.path.notifications@mail.ru</a>
+        <a href="mailto:vaapptaro@mail.ru">vaapptaro@mail.ru</a>
       </section>
     </main>
   `;
