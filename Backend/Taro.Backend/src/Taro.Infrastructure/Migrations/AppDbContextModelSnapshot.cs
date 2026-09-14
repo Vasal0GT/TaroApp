@@ -233,6 +233,10 @@ namespace Taro.Infrastructure.Migrations
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("amount");
 
+                    b.Property<DateTimeOffset?>("AutoRenewConsentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("auto_renew_consent_at");
+
                     b.Property<bool>("AutoRenewRequested")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -273,6 +277,16 @@ namespace Taro.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("kind");
+
+                    b.Property<DateTimeOffset>("OfferAcceptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("offer_accepted_at");
+
+                    b.Property<string>("OfferVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("offer_version");
 
                     b.Property<DateTimeOffset?>("PaidAt")
                         .HasColumnType("timestamp with time zone")
@@ -346,10 +360,19 @@ namespace Taro.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset?>("AutoRenewConsentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("auto_renew_consent_at");
+
+                    b.Property<string>("AutoRenewConsentOfferVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("auto_renew_consent_offer_version");
+
                     b.Property<bool>("AutoRenewEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
-                        .HasDefaultValue(true)
+                        .HasDefaultValue(false)
                         .HasColumnName("auto_renew_enabled");
 
                     b.Property<int>("BillingCycleMonths")
@@ -390,11 +413,24 @@ namespace Taro.Infrastructure.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("plan_code");
 
+                    b.Property<decimal?>("RenewalAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("renewal_amount");
+
                     b.Property<int>("RenewalFailureCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0)
                         .HasColumnName("renewal_failure_count");
+
+                    b.Property<DateTimeOffset?>("RenewalNoticePeriodEndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("renewal_notice_period_ends_at");
+
+                    b.Property<DateTimeOffset?>("RenewalNoticeSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("renewal_notice_sent_at");
 
                     b.Property<int>("StarsPerMonth")
                         .HasColumnType("integer")

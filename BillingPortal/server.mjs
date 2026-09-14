@@ -1,4 +1,5 @@
 import { createReadStream, existsSync } from "node:fs";
+import { createBrotliCompress, createGzip } from "node:zlib";
 import { extname, join, normalize } from "node:path";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -14,6 +15,7 @@ const contentTypes = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
 };
@@ -47,9 +49,36 @@ createServer((request, response) => {
 
   const filePath = resolveRequestPath(request.url || "/");
   const extension = extname(filePath);
+  const acceptsEncoding = request.headers["accept-encoding"] || "";
+  const isCompressible = [".html", ".css", ".js", ".json", ".svg"].includes(extension);
 
   response.setHeader("Content-Type", contentTypes[extension] || "application/octet-stream");
-  response.setHeader("Cache-Control", "no-store");
+  response.setHeader("X-Content-Type-Options", "nosniff");
+
+  if (filePath.includes(`${join(root, "assets")}`)) {
+    response.setHeader("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+  } else {
+    response.setHeader("Cache-Control", "no-cache");
+  }
+
+  if (!isCompressible) {
+    createReadStream(filePath).pipe(response);
+    return;
+  }
+
+  response.setHeader("Vary", "Accept-Encoding");
+
+  if (acceptsEncoding.includes("br")) {
+    response.setHeader("Content-Encoding", "br");
+    createReadStream(filePath).pipe(createBrotliCompress()).pipe(response);
+    return;
+  }
+
+  if (acceptsEncoding.includes("gzip")) {
+    response.setHeader("Content-Encoding", "gzip");
+    createReadStream(filePath).pipe(createGzip()).pipe(response);
+    return;
+  }
 
   createReadStream(filePath).pipe(response);
 }).listen(port, () => {

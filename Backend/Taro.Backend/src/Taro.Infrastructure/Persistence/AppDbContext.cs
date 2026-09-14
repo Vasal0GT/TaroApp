@@ -402,7 +402,7 @@ namespace Taro.Infrastructure.Persistence
 
                 entity.Property(x => x.AutoRenewEnabled)
                     .HasColumnName("auto_renew_enabled")
-                    .HasDefaultValue(true);
+                    .HasDefaultValue(false);
 
                 entity.Property(x => x.NextChargeAt)
                     .HasColumnName("next_charge_at");
@@ -410,6 +410,23 @@ namespace Taro.Infrastructure.Persistence
                 entity.Property(x => x.YooKassaPaymentMethodId)
                     .HasColumnName("yookassa_payment_method_id")
                     .HasMaxLength(128);
+
+                entity.Property(x => x.RenewalAmount)
+                    .HasColumnName("renewal_amount")
+                    .HasPrecision(12, 2);
+
+                entity.Property(x => x.AutoRenewConsentAt)
+                    .HasColumnName("auto_renew_consent_at");
+
+                entity.Property(x => x.AutoRenewConsentOfferVersion)
+                    .HasColumnName("auto_renew_consent_offer_version")
+                    .HasMaxLength(32);
+
+                entity.Property(x => x.RenewalNoticeSentAt)
+                    .HasColumnName("renewal_notice_sent_at");
+
+                entity.Property(x => x.RenewalNoticePeriodEndsAt)
+                    .HasColumnName("renewal_notice_period_ends_at");
 
                 entity.Property(x => x.RenewalFailureCount)
                     .HasColumnName("renewal_failure_count")
@@ -484,6 +501,17 @@ namespace Taro.Infrastructure.Persistence
                 entity.Property(x => x.AutoRenewRequested)
                     .HasColumnName("auto_renew_requested")
                     .HasDefaultValue(false);
+
+                entity.Property(x => x.OfferVersion)
+                    .HasColumnName("offer_version")
+                    .HasMaxLength(32)
+                    .IsRequired();
+
+                entity.Property(x => x.OfferAcceptedAt)
+                    .HasColumnName("offer_accepted_at");
+
+                entity.Property(x => x.AutoRenewConsentAt)
+                    .HasColumnName("auto_renew_consent_at");
 
                 entity.Property(x => x.RenewalPeriodEndsAt)
                     .HasColumnName("renewal_period_ends_at");

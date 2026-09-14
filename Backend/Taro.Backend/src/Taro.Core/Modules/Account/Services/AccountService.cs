@@ -135,6 +135,11 @@ namespace Taro.Core.Modules.Account.Services
                 subscription.NextStarsGrantAt = null;
                 subscription.StarsPerMonth = 0;
                 subscription.YooKassaPaymentMethodId = null;
+                subscription.RenewalAmount = null;
+                subscription.AutoRenewConsentAt = null;
+                subscription.AutoRenewConsentOfferVersion = null;
+                subscription.RenewalNoticeSentAt = null;
+                subscription.RenewalNoticePeriodEndsAt = null;
 
                 if (subscription.Status is SubscriptionStatus.Active
                     or SubscriptionStatus.CancelAtPeriodEnd

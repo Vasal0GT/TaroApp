@@ -26,6 +26,7 @@ namespace Taro.Core.Interfaces
         Task ProcessYooKassaPaymentCanceledAsync(string yooKassaPaymentId, CancellationToken cancellationToken = default);
         Task<int> ReconcilePendingYooKassaPaymentsAsync(CancellationToken cancellationToken = default);
         Task<int> CreateDueSubscriptionRenewalsAsync(DateTimeOffset now, CancellationToken cancellationToken = default);
+        Task<int> SendDueSubscriptionRenewalNoticesAsync(DateTimeOffset now, CancellationToken cancellationToken = default);
         //
         Task<CreateBillingPortalSessionResult> CreateBillingPortalSessionAsync(Guid userId, CancellationToken cancellationToken = default);
         Task<Guid> ConsumeBillingPortalSessionAsync(string token, CancellationToken cancellationToken = default);

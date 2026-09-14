@@ -19,5 +19,8 @@ namespace Taro.Infrastructure.Email
         public string FromEmail { get; set; } = "no-reply@taro.local";
 
         public string FromName { get; set; } = "Taro";
+
+        public string SubscriptionManagementUrl { get; set; } =
+            "https://pay.taro-path-app.online/login?next=/account";
     }
 }

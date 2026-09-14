@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
 using Taro.Core.Interfaces;
+using System.Globalization;
 
 namespace Taro.Infrastructure.Email
 {
@@ -84,6 +85,51 @@ namespace Taro.Infrastructure.Email
                 <p>If you did not request this, you can ignore this email.</p>
             </div>
             """
+            }.ToMessageBody();
+
+            await SendAsync(message, cancellationToken);
+        }
+
+        public async Task SendSubscriptionRenewalNoticeAsync(
+            string email,
+            decimal amount,
+            DateTimeOffset scheduledChargeAt,
+            int billingCycleMonths,
+            CancellationToken cancellationToken = default)
+        {
+            var message = new MimeMessage();
+            message.From.Add(new MailboxAddress(_options.FromName, _options.FromEmail));
+            message.To.Add(MailboxAddress.Parse(email));
+            message.Subject = "Предстоящее продление подписки «Таро Путь»";
+
+            var amountText = amount.ToString("0.00", CultureInfo.GetCultureInfo("ru-RU"));
+            var dateText = scheduledChargeAt.ToUniversalTime().ToString(
+                "dd.MM.yyyy 'в' HH:mm 'UTC'",
+                CultureInfo.GetCultureInfo("ru-RU"));
+            var periodText = billingCycleMonths == 1
+                ? "1 месяц"
+                : $"{billingCycleMonths} мес.";
+            var managementUrl = _options.SubscriptionManagementUrl;
+
+            message.Body = new BodyBuilder
+            {
+                TextBody = $"""
+                    Не ранее {dateText} будет выполнено автоматическое списание {amountText} ₽ за продление подписки «Таро Путь» на {periodText}.
+
+                    Чтобы отказаться от продления и прекратить будущие списания, отключите автопродление до указанной даты:
+                    {managementUrl}
+
+                    После отключения доступ сохранится до конца уже оплаченного периода, а сохранённый способ оплаты больше не будет использоваться для повторных списаний.
+                    """,
+                HtmlBody = $"""
+                    <div style="font-family: Arial, sans-serif; line-height: 1.55; color: #241f2b;">
+                        <h2>Предстоящее продление подписки</h2>
+                        <p>Не ранее <strong>{dateText}</strong> будет выполнено автоматическое списание <strong>{amountText} ₽</strong> за продление подписки «Таро Путь» на {periodText}.</p>
+                        <p>Чтобы отказаться от продления и прекратить будущие списания, отключите автопродление до указанной даты.</p>
+                        <p><a href="{managementUrl}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#6b4eff;color:#fff;text-decoration:none;">Управлять подпиской</a></p>
+                        <p>После отключения доступ сохранится до конца уже оплаченного периода, а сохранённый способ оплаты больше не будет использоваться для повторных списаний.</p>
+                    </div>
+                    """
             }.ToMessageBody();
 
             await SendAsync(message, cancellationToken);

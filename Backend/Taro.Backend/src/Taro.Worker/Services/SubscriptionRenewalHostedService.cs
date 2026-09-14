@@ -36,10 +36,22 @@ namespace Taro.Worker.Services
                 var billingService = scope.ServiceProvider
                     .GetRequiredService<IBillingService>();
 
+                var noticeCount = await billingService
+                    .SendDueSubscriptionRenewalNoticesAsync(
+                        DateTimeOffset.UtcNow,
+                        cancellationToken);
+
                 var createdCount = await billingService
                     .CreateDueSubscriptionRenewalsAsync(
                         DateTimeOffset.UtcNow,
                         cancellationToken);
+
+                if (noticeCount > 0)
+                {
+                    _logger.LogInformation(
+                        "Sent {Count} subscription renewal notice(s).",
+                        noticeCount);
+                }
 
                 var grantedCount = await billingService
                     .GrantDueSubscriptionStarsAsync(

@@ -27,13 +27,25 @@ namespace Taro.Core.Entities
 
         public int BillingCycleMonths { get; set; }
 
-        public bool AutoRenewEnabled { get; set; } = true;
+        public bool AutoRenewEnabled { get; set; }
 
         // Дата следующей попытки автосписания.
         public DateTimeOffset? NextChargeAt { get; set; }
 
         // Сохранённый способ оплаты YooKassa для автопродления.
         public string? YooKassaPaymentMethodId { get; set; }
+
+        // Сумма, на которую пользователь дал отдельное согласие для автопродления.
+        public decimal? RenewalAmount { get; set; }
+
+        public DateTimeOffset? AutoRenewConsentAt { get; set; }
+
+        public string? AutoRenewConsentOfferVersion { get; set; }
+
+        // Уведомление должно быть отправлено не менее чем за три дня до списания.
+        public DateTimeOffset? RenewalNoticeSentAt { get; set; }
+
+        public DateTimeOffset? RenewalNoticePeriodEndsAt { get; set; }
 
         public int RenewalFailureCount { get; set; }
 

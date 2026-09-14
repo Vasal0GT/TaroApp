@@ -27,6 +27,13 @@ namespace Taro.Core.Entities
         // Явное согласие пользователя на сохранение способа оплаты и автопродление.
         public bool AutoRenewRequested { get; set; }
 
+        // Версия оферты и момент её принятия фиксируются для каждого заказа.
+        public string OfferVersion { get; set; } = string.Empty;
+
+        public DateTimeOffset OfferAcceptedAt { get; set; }
+
+        public DateTimeOffset? AutoRenewConsentAt { get; set; }
+
         // Для повторных списаний фиксируем период и номер попытки.
         public DateTimeOffset? RenewalPeriodEndsAt { get; set; }
 

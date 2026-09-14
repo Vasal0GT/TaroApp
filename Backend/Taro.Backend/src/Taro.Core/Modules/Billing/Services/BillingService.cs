@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Logging;
 using Taro.Core.Common;
 using Taro.Core.Entities;
 using Taro.Core.Enums;
@@ -16,6 +17,8 @@ namespace Taro.Core.Modules.Billing.Services
         private const string PlusMonthlyPlanCode = "plus_1m";
         private const decimal PlusMonthlyPrice = 449m;
         private const int PlusMonthlyStars = 150;
+        private const string CurrentOfferVersion = "2026-09-14";
+        private static readonly TimeSpan RenewalNoticeLeadTime = TimeSpan.FromDays(3);
 
         private static readonly BillingPlan[] BillingPlans =
         [
@@ -35,11 +38,19 @@ namespace Taro.Core.Modules.Billing.Services
 
         private readonly IYooKassaClient _yooKassaClient;
         private readonly IAppDbContext _db;
+        private readonly IEmailSender _emailSender;
+        private readonly ILogger<BillingService> _logger;
 
-        public BillingService(IAppDbContext db, IYooKassaClient yooKassaClient)
+        public BillingService(
+            IAppDbContext db,
+            IYooKassaClient yooKassaClient,
+            IEmailSender emailSender,
+            ILogger<BillingService> logger)
         {
             _db = db;
             _yooKassaClient = yooKassaClient;
+            _emailSender = emailSender;
+            _logger = logger;
         }
 
         public async Task<BillingAccountDto> GetAccountAsync(Guid userId, CancellationToken cancellationToken = default)
@@ -117,8 +128,8 @@ namespace Taro.Core.Modules.Billing.Services
                     StartsAt = now,
                     ExpiresAt = now.AddMonths(1),
                     BillingCycleMonths = 1,
-                    AutoRenewEnabled = true,
-                    NextChargeAt = now.AddMonths(1),
+                    AutoRenewEnabled = false,
+                    NextChargeAt = null,
                     StarsPerMonth = starsPerMonth,
                     NextStarsGrantAt = starsPerMonth > 0
                         ? now.AddMonths(1)
@@ -135,7 +146,7 @@ namespace Taro.Core.Modules.Billing.Services
                 subscription.PlanCode = PlusMonthlyPlanCode;
                 subscription.Status = SubscriptionStatus.Active;
                 subscription.BillingCycleMonths = 1;
-                subscription.AutoRenewEnabled = true;
+                subscription.AutoRenewEnabled = false;
                 subscription.CanceledAt = null;
                 subscription.StarsPerMonth = starsPerMonth;
                 subscription.ExpiresAt = subscription.ExpiresAt.AddMonths(1);
@@ -160,6 +171,8 @@ namespace Taro.Core.Modules.Billing.Services
                 Amount = PlusMonthlyPrice,
                 Currency = "RUB",
                 IdempotenceKey = $"dev-plus-{Guid.NewGuid():N}",
+                OfferVersion = "development",
+                OfferAcceptedAt = now,
                 PaidAt = now
             };
 
@@ -206,9 +219,7 @@ namespace Taro.Core.Modules.Billing.Services
 
             if (subscription.ExpiresAt <= now)
             {
-                subscription.Status = SubscriptionStatus.Expired;
-                subscription.AutoRenewEnabled = false;
-                subscription.NextChargeAt = null;
+                DisableAutoRenew(subscription, now);
 
                 if (user.SubscriptionExpiresAt is null ||
                     user.SubscriptionExpiresAt <= now)
@@ -224,10 +235,10 @@ namespace Taro.Core.Modules.Billing.Services
                     400);
             }
 
-            if (enabled && string.IsNullOrWhiteSpace(subscription.YooKassaPaymentMethodId))
+            if (enabled && !subscription.AutoRenewEnabled)
             {
                 throw new AppException(
-                    "To enable auto-renewal, first make a subscription payment with auto-renewal enabled.",
+                    "To enable auto-renewal, make a new subscription payment and give separate consent during checkout.",
                     409);
             }
 
@@ -237,14 +248,12 @@ namespace Taro.Core.Modules.Billing.Services
             {
                 subscription.Status = SubscriptionStatus.Active;
                 subscription.CanceledAt = null;
-                subscription.NextChargeAt = subscription.ExpiresAt;
+                subscription.NextChargeAt = null;
                 subscription.RenewalFailureCount = 0;
             }
             else
             {
-                subscription.Status = SubscriptionStatus.CancelAtPeriodEnd;
-                subscription.CanceledAt = now;
-                subscription.NextChargeAt = null;
+                DisableAutoRenew(subscription, now);
             }
 
             await _db.SaveChangesAsync(cancellationToken);
@@ -432,9 +441,7 @@ namespace Taro.Core.Modules.Billing.Services
             }
             else
             {
-                subscription.Status = SubscriptionStatus.Expired;
-                subscription.AutoRenewEnabled = false;
-                subscription.NextChargeAt = null;
+                DisableAutoRenew(subscription, now);
             }
 
             if (user.SubscriptionExpiresAt is null ||
@@ -555,6 +562,7 @@ namespace Taro.Core.Modules.Billing.Services
             var amount =
                 (plan?.Price ?? 0m) +
                 (starPack?.Price ?? 0m);
+            var checkoutCreatedAt = DateTimeOffset.UtcNow;
 
             var paymentOrder = new PaymentOrder
             {
@@ -565,10 +573,15 @@ namespace Taro.Core.Modules.Billing.Services
                     : PaymentOrderKind.SubscriptionInitial,
                 Status = PaymentOrderStatus.Created,
                 AutoRenewRequested = plan is not null && autoRenewEnabled,
+                OfferVersion = CurrentOfferVersion,
+                OfferAcceptedAt = checkoutCreatedAt,
+                AutoRenewConsentAt = plan is not null && autoRenewEnabled
+                    ? checkoutCreatedAt
+                    : null,
                 Amount = amount,
                 Currency = "RUB",
                 IdempotenceKey = Guid.NewGuid().ToString("N"),
-                CreatedAt = DateTimeOffset.UtcNow
+                CreatedAt = checkoutCreatedAt
             };
 
             _db.PaymentOrders.Add(paymentOrder);
@@ -815,6 +828,23 @@ namespace Taro.Core.Modules.Billing.Services
                             : paymentOrder.AutoRenewRequested &&
                               !string.IsNullOrWhiteSpace(subscription.YooKassaPaymentMethodId);
 
+                    if (subscription.AutoRenewEnabled)
+                    {
+                        if (paymentOrder.Kind != PaymentOrderKind.SubscriptionRenewal)
+                        {
+                            subscription.RenewalAmount = product.Plan.Price;
+                            subscription.AutoRenewConsentAt = paymentOrder.AutoRenewConsentAt;
+                            subscription.AutoRenewConsentOfferVersion = paymentOrder.OfferVersion;
+                        }
+                    }
+                    else
+                    {
+                        subscription.YooKassaPaymentMethodId = null;
+                        subscription.RenewalAmount = null;
+                        subscription.AutoRenewConsentAt = null;
+                        subscription.AutoRenewConsentOfferVersion = null;
+                    }
+
                     subscription.Status = subscription.AutoRenewEnabled
                         ? SubscriptionStatus.Active
                         : SubscriptionStatus.CancelAtPeriodEnd;
@@ -826,6 +856,8 @@ namespace Taro.Core.Modules.Billing.Services
                     subscription.NextChargeAt = subscription.AutoRenewEnabled
                         ? subscription.ExpiresAt
                         : null;
+                    subscription.RenewalNoticeSentAt = null;
+                    subscription.RenewalNoticePeriodEndsAt = null;
 
                     subscription.RenewalFailureCount = 0;
                     subscription.LastRenewalAttemptAt =
@@ -938,6 +970,66 @@ namespace Taro.Core.Modules.Billing.Services
             await _db.SaveChangesAsync(cancellationToken);
         }
 
+        public async Task<int> SendDueSubscriptionRenewalNoticesAsync(
+            DateTimeOffset now,
+            CancellationToken cancellationToken = default)
+        {
+            const int batchSize = 100;
+            var noticeWindowEndsAt = now.Add(RenewalNoticeLeadTime);
+
+            var subscriptions = await _db.Subscriptions
+                .Include(x => x.User)
+                .Where(x =>
+                    x.AutoRenewEnabled &&
+                    x.NextChargeAt != null &&
+                    x.NextChargeAt <= noticeWindowEndsAt &&
+                    x.YooKassaPaymentMethodId != null &&
+                    x.RenewalAmount != null &&
+                    x.AutoRenewConsentAt != null &&
+                    x.User.DeletedAt == null &&
+                    x.User.Email != string.Empty &&
+                    (x.RenewalNoticeSentAt == null ||
+                     x.RenewalNoticePeriodEndsAt != x.ExpiresAt))
+                .OrderBy(x => x.NextChargeAt)
+                .Take(batchSize)
+                .ToListAsync(cancellationToken);
+
+            var sentCount = 0;
+
+            foreach (var subscription in subscriptions)
+            {
+                var earliestCompliantChargeAt = now.Add(RenewalNoticeLeadTime);
+                if (subscription.NextChargeAt < earliestCompliantChargeAt)
+                {
+                    subscription.NextChargeAt = earliestCompliantChargeAt;
+                }
+
+                try
+                {
+                    await _emailSender.SendSubscriptionRenewalNoticeAsync(
+                        subscription.User.Email,
+                        subscription.RenewalAmount!.Value,
+                        subscription.NextChargeAt!.Value,
+                        subscription.BillingCycleMonths,
+                        cancellationToken);
+
+                    subscription.RenewalNoticeSentAt = now;
+                    subscription.RenewalNoticePeriodEndsAt = subscription.ExpiresAt;
+                    await _db.SaveChangesAsync(cancellationToken);
+                    sentCount++;
+                }
+                catch (Exception error) when (error is not OperationCanceledException)
+                {
+                    _logger.LogError(
+                        error,
+                        "Could not send renewal notice for subscription {SubscriptionId}.",
+                        subscription.Id);
+                }
+            }
+
+            return sentCount;
+        }
+
         public async Task<int> CreateDueSubscriptionRenewalsAsync(
             DateTimeOffset now,
             CancellationToken cancellationToken = default)
@@ -950,6 +1042,11 @@ namespace Taro.Core.Modules.Billing.Services
                     x.NextChargeAt != null &&
                     x.NextChargeAt <= now &&
                     x.YooKassaPaymentMethodId != null &&
+                    x.RenewalAmount != null &&
+                    x.AutoRenewConsentAt != null &&
+                    x.RenewalNoticeSentAt != null &&
+                    x.RenewalNoticeSentAt <= now - RenewalNoticeLeadTime &&
+                    x.RenewalNoticePeriodEndsAt == x.ExpiresAt &&
                     (x.Status == SubscriptionStatus.Active ||
                      x.Status == SubscriptionStatus.PaymentFailed))
                 .OrderBy(x => x.NextChargeAt)
@@ -963,8 +1060,7 @@ namespace Taro.Core.Modules.Billing.Services
                 var plan = GetBillingPlanOrNull(subscription.PlanCode);
                 if (plan is null)
                 {
-                    subscription.AutoRenewEnabled = false;
-                    subscription.NextChargeAt = null;
+                    DisableAutoRenew(subscription, now);
                     subscription.Status = SubscriptionStatus.PaymentFailed;
                     continue;
                 }
@@ -985,8 +1081,7 @@ namespace Taro.Core.Modules.Billing.Services
 
                 if (subscription.RenewalFailureCount >= 3)
                 {
-                    subscription.AutoRenewEnabled = false;
-                    subscription.NextChargeAt = null;
+                    DisableAutoRenew(subscription, now);
                     subscription.Status = SubscriptionStatus.PaymentFailed;
                     continue;
                 }
@@ -1000,9 +1095,12 @@ namespace Taro.Core.Modules.Billing.Services
                     Kind = PaymentOrderKind.SubscriptionRenewal,
                     Status = PaymentOrderStatus.Created,
                     AutoRenewRequested = true,
+                    OfferVersion = subscription.AutoRenewConsentOfferVersion ?? CurrentOfferVersion,
+                    OfferAcceptedAt = subscription.AutoRenewConsentAt!.Value,
+                    AutoRenewConsentAt = subscription.AutoRenewConsentAt,
                     RenewalPeriodEndsAt = periodEndsAt,
                     RenewalAttemptNumber = attemptNumber,
-                    Amount = plan.Price,
+                    Amount = subscription.RenewalAmount!.Value,
                     Currency = "RUB",
                     IdempotenceKey = BuildRenewalIdempotenceKey(
                         subscription.Id,
@@ -1081,8 +1179,8 @@ namespace Taro.Core.Modules.Billing.Services
 
             if (subscription.RenewalFailureCount >= 3)
             {
-                subscription.AutoRenewEnabled = false;
-                subscription.NextChargeAt = null;
+                DisableAutoRenew(subscription, now);
+                subscription.Status = SubscriptionStatus.PaymentFailed;
                 return;
             }
 
@@ -1092,6 +1190,24 @@ namespace Taro.Core.Modules.Billing.Services
                 2 => now.AddHours(6),
                 _ => now.AddHours(24)
             };
+        }
+
+        private static void DisableAutoRenew(
+            Subscription subscription,
+            DateTimeOffset disabledAt)
+        {
+            subscription.AutoRenewEnabled = false;
+            subscription.Status = subscription.ExpiresAt > disabledAt
+                ? SubscriptionStatus.CancelAtPeriodEnd
+                : SubscriptionStatus.Expired;
+            subscription.CanceledAt = disabledAt;
+            subscription.NextChargeAt = null;
+            subscription.YooKassaPaymentMethodId = null;
+            subscription.RenewalAmount = null;
+            subscription.AutoRenewConsentAt = null;
+            subscription.AutoRenewConsentOfferVersion = null;
+            subscription.RenewalNoticeSentAt = null;
+            subscription.RenewalNoticePeriodEndsAt = null;
         }
 
         private static string BuildRenewalIdempotenceKey(
