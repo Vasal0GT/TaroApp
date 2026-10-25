@@ -1,0 +1,63 @@
+# Environment and credentials
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+credentials.json
+**/credentials/
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.mobileprovision
+
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# JavaScript / Expo
+**/node_modules/
+**/.expo/
+**/dist/
+**/web-build/
+**/.pnpm-store/
+**/.npm/
+**/*.tsbuildinfo
+**/expo-env.d.ts
+
+# IDE and local agents
+.vs/
+**/.vs/
+.idea/
+**/.idea/
+.vscode/
+**/.vscode/
+.claude/
+**/.claude/
+.codex/
+**/.codex/
+.agents/
+**/.agents/
+AGENTS.md
+CLAUDE.md
+
+# Native build output
+**/.gradle/
+**/.kotlin/
+TaroApp/android/
+TaroApp/ios/
+
+# OS and logs
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

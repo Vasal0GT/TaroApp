@@ -2,14 +2,12 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Taro.Core.Enums;
 using Taro.Core.Interfaces;
 using Taro.Core.Modules.Readings.Dtos;
 using System.Net;
-using System.Net.Http.Headers;
 using Microsoft.Extensions.Logging;
 
 namespace Taro.Infrastructure.AI
